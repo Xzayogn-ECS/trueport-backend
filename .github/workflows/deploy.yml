@@ -20,15 +20,14 @@ jobs:
           npm ci
           npm run build || true
 
-      - name: Deploy files to EC2
-        uses: burnett01/rsync-deployments@v3.1
+      - name: Upload files to EC2
+        uses: appleboy/scp-action@v0.1.7
         with:
-          switches: -avz --delete
-          path: "./"
-          remote_path: "/var/www/trueportme-backend"
-          remote_host: ${{ secrets.EC2_HOST }}
-          remote_user: ${{ secrets.EC2_USER }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          source: "./"
+          target: "/var/www/trueportme-backend"
 
       - name: Create .env and restart backend
         uses: appleboy/ssh-action@v0.1.8
