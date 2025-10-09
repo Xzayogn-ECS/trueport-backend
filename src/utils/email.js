@@ -6,7 +6,7 @@ if (process.env.RESEND_API_KEY) {
 }
 
 const sendVerificationEmail = async (verifierEmail, token, itemTitle, userName, itemType = 'experience') => {
-  const verificationUrl = `${process.env.FRONTEND_URL}/verify/${token}`;
+  const verificationUrl = `${process.env.FRONTEND_URL}/verifier-invite/preview/${token}`;
   const dashboardUrl = `${process.env.FRONTEND_URL}/verifier/dashboard`;
   
   const itemTypeDisplay = itemType.toLowerCase().replace('_', ' ');

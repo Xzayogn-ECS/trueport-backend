@@ -17,12 +17,17 @@ const educationRoutes = require('./routes/education');
 const projectRoutes = require('./routes/projects');
 const verificationRoutes = require('./routes/verificationUnified');
 const verifierRoutes = require('./routes/verifier');
+const verificationActionsRoutes = require('./routes/verificationActions');
+const verifierInviteRoutes = require('./routes/verifierInvites');
 const portfolioRoutes = require('./routes/portfolio');
 const githubRoutes = require('./routes/github');
 
 // Admin routes
 const superAdminRoutes = require('./routes/superAdmin');
 const instituteAdminRoutes = require('./routes/instituteAdmin');
+
+// Event routes
+const eventRoutes = require('./routes/events');
 
 const app = express();
 
@@ -80,12 +85,17 @@ app.use('/api/education', educationRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/verify', verificationRoutes);
 app.use('/api/verifier', verifierRoutes);
+app.use('/api/verifications', verificationActionsRoutes);
+app.use('/api/verifier-invites', verifierInviteRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/github', githubRoutes);
 
 // Admin routes
 app.use('/api/super-admin', superAdminRoutes);
 app.use('/api/institute-admin', instituteAdminRoutes);
+
+// Event routes
+app.use('/api/events', eventRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

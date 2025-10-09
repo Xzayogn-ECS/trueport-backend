@@ -167,6 +167,273 @@ router.put('/me/contact-visibility', requireAuth, async (req, res) => {
   }
 });
 
+
+// Get all custom URLs for current user
+router.get('/me/custom-urls', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select('customUrls contactVisibility.customUrls');
+
+    const customUrls = user.customUrls || [];
+    const isVisible = user.contactVisibility?.customUrls !== false;
+
+    res.json({
+      customUrls: customUrls.sort((a, b) => a.order - b.order),
+      isVisible
+    });
+  } catch (error) {
+    console.error('Get custom URLs error:', error);
+    res.status(500).json({
+      message: 'Failed to fetch custom URLs',
+      error: error.message
+    });
+  }
+});
+
+// Add a new custom URL
+router.post('/me/custom-urls', requireAuth, async (req, res) => {
+  try {
+    const { label, url, isVisible } = req.body;
+
+    // Validation
+    if (!label || !label.trim()) {
+      return res.status(400).json({
+        message: 'Label is required'
+      });
+    }
+
+    if (label.length > 50) {
+      return res.status(400).json({
+        message: 'Label must be less than 50 characters'
+      });
+    }
+
+    if (!url || !url.trim()) {
+      return res.status(400).json({
+        message: 'URL is required'
+      });
+    }
+
+    // Validate URL format
+    const urlRegex = /^https?:\/\/.+/;
+    if (!urlRegex.test(url.trim())) {
+      return res.status(400).json({
+        message: 'Please enter a valid URL (must start with http:// or https://)'
+      });
+    }
+
+    // Check for maximum URLs (optional limit)
+    const user = await User.findById(req.user._id);
+    if (user.customUrls && user.customUrls.length >= 20) {
+      return res.status(400).json({
+        message: 'Maximum 20 custom URLs allowed'
+      });
+    }
+
+    // Get the next order number
+    const maxOrder = user.customUrls && user.customUrls.length > 0
+      ? Math.max(...user.customUrls.map(u => u.order || 0))
+      : -1;
+
+    const newUrl = {
+      label: label.trim(),
+      url: url.trim(),
+      isVisible: isVisible !== false, // Default to true
+      order: maxOrder + 1,
+      createdAt: new Date()
+    };
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $push: { customUrls: newUrl } },
+      { new: true, runValidators: true }
+    ).select('customUrls');
+
+    const addedUrl = updatedUser.customUrls[updatedUser.customUrls.length - 1];
+
+    res.status(201).json({
+      message: 'Custom URL added successfully',
+      customUrl: addedUrl
+    });
+
+  } catch (error) {
+    console.error('Add custom URL error:', error);
+    res.status(500).json({
+      message: 'Failed to add custom URL',
+      error: error.message
+    });
+  }
+});
+
+// Update a specific custom URL
+router.put('/me/custom-urls/:urlId', requireAuth, async (req, res) => {
+  try {
+    const { urlId } = req.params;
+    const { label, url, isVisible, order } = req.body;
+
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Find the custom URL
+    const urlIndex = user.customUrls.findIndex(u => u._id.toString() === urlId);
+    
+    if (urlIndex === -1) {
+      return res.status(404).json({ message: 'Custom URL not found' });
+    }
+
+    // Update fields if provided
+    if (label !== undefined) {
+      if (!label.trim()) {
+        return res.status(400).json({ message: 'Label cannot be empty' });
+      }
+      if (label.length > 50) {
+        return res.status(400).json({ message: 'Label must be less than 50 characters' });
+      }
+      user.customUrls[urlIndex].label = label.trim();
+    }
+
+    if (url !== undefined) {
+      if (!url.trim()) {
+        return res.status(400).json({ message: 'URL cannot be empty' });
+      }
+      const urlRegex = /^https?:\/\/.+/;
+      if (!urlRegex.test(url.trim())) {
+        return res.status(400).json({
+          message: 'Please enter a valid URL (must start with http:// or https://)'
+        });
+      }
+      user.customUrls[urlIndex].url = url.trim();
+    }
+
+    if (isVisible !== undefined) {
+      user.customUrls[urlIndex].isVisible = isVisible;
+    }
+
+    if (order !== undefined && typeof order === 'number') {
+      user.customUrls[urlIndex].order = order;
+    }
+
+    await user.save();
+
+    res.json({
+      message: 'Custom URL updated successfully',
+      customUrl: user.customUrls[urlIndex]
+    });
+
+  } catch (error) {
+    console.error('Update custom URL error:', error);
+    res.status(500).json({
+      message: 'Failed to update custom URL',
+      error: error.message
+    });
+  }
+});
+
+// Delete a specific custom URL
+router.delete('/me/custom-urls/:urlId', requireAuth, async (req, res) => {
+  try {
+    const { urlId } = req.params;
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $pull: { customUrls: { _id: urlId } } },
+      { new: true }
+    ).select('customUrls');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({
+      message: 'Custom URL deleted successfully',
+      customUrls: user.customUrls
+    });
+
+  } catch (error) {
+    console.error('Delete custom URL error:', error);
+    res.status(500).json({
+      message: 'Failed to delete custom URL',
+      error: error.message
+    });
+  }
+});
+
+// Reorder custom URLs
+router.put('/me/custom-urls/reorder', requireAuth, async (req, res) => {
+  try {
+    const { orderedIds } = req.body; // Array of URL IDs in desired order
+
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({
+        message: 'orderedIds must be an array'
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update order for each URL
+    orderedIds.forEach((id, index) => {
+      const urlIndex = user.customUrls.findIndex(u => u._id.toString() === id);
+      if (urlIndex !== -1) {
+        user.customUrls[urlIndex].order = index;
+      }
+    });
+
+    await user.save();
+
+    res.json({
+      message: 'Custom URLs reordered successfully',
+      customUrls: user.customUrls.sort((a, b) => a.order - b.order)
+    });
+
+  } catch (error) {
+    console.error('Reorder custom URLs error:', error);
+    res.status(500).json({
+      message: 'Failed to reorder custom URLs',
+      error: error.message
+    });
+  }
+});
+
+// Toggle visibility of custom URLs section
+router.put('/me/custom-urls/visibility', requireAuth, async (req, res) => {
+  try {
+    const { isVisible } = req.body;
+
+    if (typeof isVisible !== 'boolean') {
+      return res.status(400).json({
+        message: 'isVisible must be a boolean value'
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { 'contactVisibility.customUrls': isVisible } },
+      { new: true, runValidators: true }
+    ).select('contactVisibility.customUrls');
+
+    res.json({
+      message: 'Custom URLs visibility updated successfully',
+      isVisible: user.contactVisibility.customUrls
+    });
+
+  } catch (error) {
+    console.error('Update custom URLs visibility error:', error);
+    res.status(500).json({
+      message: 'Failed to update visibility',
+      error: error.message
+    });
+  }
+});
+
+
 // Update user profile
 router.put('/me', requireAuth, async (req, res) => {
   try {
@@ -930,12 +1197,12 @@ router.get('/me/portfolio-items', requireAuth, async (req, res) => {
 
     // Get all experiences with visibility status
     const experiences = await Experience.find({ userId: req.user._id })
-      .select('title description role startDate endDate verified isPublic createdAt')
+      .select('title description role startDate endDate verified isPublic verifierName verifierOrganization createdAt')
       .sort({ createdAt: -1 });
 
     // Get all education entries with visibility status
     const education = await Education.find({ userId: req.user._id })
-      .select('courseName courseType boardOrUniversity passingYear verified isPublic createdAt')
+      .select('courseName courseType boardOrUniversity passingYear verified isPublic verifierName verifierOrganization createdAt')
       .sort({ passingYear: -1, createdAt: -1 });
 
     // Get all projects with visibility status
@@ -953,6 +1220,8 @@ router.get('/me/portfolio-items', requireAuth, async (req, res) => {
         startDate: exp.startDate,
         endDate: exp.endDate,
         verified: exp.verified,
+        verifierName: exp.verifierName || null,
+        verifierOrganization: exp.verifierOrganization || null,
         isPublic: exp.isPublic,
         createdAt: exp.createdAt,
         type: 'experience'
@@ -964,6 +1233,8 @@ router.get('/me/portfolio-items', requireAuth, async (req, res) => {
         institution: edu.boardOrUniversity,
         passingYear: edu.passingYear,
         verified: edu.verified,
+        verifierName: edu.verifierName || null,
+        verifierOrganization: edu.verifierOrganization || null,
         isPublic: edu.isPublic,
         createdAt: edu.createdAt,
         type: 'education'

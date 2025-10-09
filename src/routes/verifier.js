@@ -113,19 +113,42 @@ router.get('/pending-requests', requireAuth, requireVerifier, async (req, res) =
       verifications.map(async (verification) => {
         try {
           const Model = getModel(verification.itemType);
-          const item = await Model.findById(verification.itemId).populate('userId', 'name email');
+          const item = await Model.findById(verification.itemId).populate('userId', 'name email profilePicture');
 
           if (!item || !item.userId) return null;
+
+          // Build basic item info for quick view
+          let itemInfo = {
+            title: item.title || item.courseName || item.projectName,
+            description: item.description?.substring(0, 200) + '...' || '', // Truncate for quick view
+            attachmentsCount: item.attachments?.length || 0
+          };
+
+          // Add key type-specific fields
+          if (verification.itemType === 'EXPERIENCE') {
+            itemInfo.role = item.role;
+            itemInfo.startDate = item.startDate;
+            itemInfo.endDate = item.endDate;
+          } else if (verification.itemType === 'EDUCATION') {
+            itemInfo.degree = item.degree;
+            itemInfo.institution = item.institution;
+            itemInfo.passingYear = item.passingYear;
+          } else if (verification.itemType === 'GITHUB_PROJECT') {
+            itemInfo.repositoryUrl = item.repositoryUrl;
+            itemInfo.stars = item.stars;
+            itemInfo.language = item.language;
+          }
 
           return {
             _id: verification._id,
             studentId: item.userId._id,
             studentName: item.userId.name,
             studentEmail: item.userId.email,
+            studentProfilePicture: item.userId.profilePicture,
             type: verification.itemType,
-            title: item.title || item.courseName || item.projectName,
-            description: item.description,
-            createdAt: verification.createdAt
+            item: itemInfo,
+            createdAt: verification.createdAt,
+            expiresAt: verification.expiresAt
           };
         } catch (error) {
           console.error('Error processing verification:', error);
@@ -204,6 +227,48 @@ router.get('/requests', requireAuth, requireVerifier, async (req, res) => {
             }
           }
 
+          // Build comprehensive item details based on type
+          let itemDetails = {
+            title: item.title || item.courseName || item.projectName,
+            description: item.description,
+            attachments: item.attachments || []
+          };
+
+          // Add type-specific fields
+          if (verification.itemType === 'EXPERIENCE') {
+            itemDetails = {
+              ...itemDetails,
+              role: item.role,
+              startDate: item.startDate,
+              endDate: item.endDate,
+              tags: item.tags || [],
+              isPublic: item.isPublic,
+              createdAt: item.createdAt
+            };
+          } else if (verification.itemType === 'EDUCATION') {
+            itemDetails = {
+              ...itemDetails,
+              degree: item.degree,
+              fieldOfStudy: item.fieldOfStudy,
+              grade: item.grade,
+              passingYear: item.passingYear,
+              startDate: item.startDate,
+              endDate: item.endDate,
+              createdAt: item.createdAt
+            };
+          } else if (verification.itemType === 'GITHUB_PROJECT') {
+            itemDetails = {
+              ...itemDetails,
+              repositoryUrl: item.repositoryUrl,
+              technologies: item.technologies || [],
+              stars: item.stars,
+              forks: item.forks,
+              language: item.language,
+              createdAt: item.createdAt,
+              lastUpdated: item.lastUpdated
+            };
+          }
+
           return {
             id: verification._id,
             student: {
@@ -214,14 +279,7 @@ router.get('/requests', requireAuth, requireVerifier, async (req, res) => {
             },
             itemType: verification.itemType,
             itemId: verification.itemId,
-            item: {
-              title: item.title || item.courseName || item.projectName,
-              description: item.description,
-              startDate: item.startDate,
-              endDate: item.endDate,
-              passingYear: item.passingYear,
-              attachments: item.attachments || []
-            },
+            item: itemDetails,
             status: verification.status,
             requestedAt: verification.createdAt,
             verifierEmail: verification.verifierEmail,
@@ -288,6 +346,51 @@ router.get('/request/:requestId', requireAuth, requireVerifier, async (req, res)
       verificationId: verification._id
     }).sort({ createdAt: 1 });
 
+    // Build comprehensive item details based on type
+    let itemDetails = {
+      id: item._id,
+      type: verification.itemType,
+      title: item.title || item.courseName || item.projectName,
+      description: item.description,
+      attachments: item.attachments || []
+    };
+
+    // Add type-specific fields for detailed review
+    if (verification.itemType === 'EXPERIENCE') {
+      itemDetails = {
+        ...itemDetails,
+        role: item.role,
+        startDate: item.startDate,
+        endDate: item.endDate,
+        tags: item.tags || [],
+        isPublic: item.isPublic,
+        verified: item.verified,
+        verifiedAt: item.verifiedAt,
+        verifiedBy: item.verifiedBy,
+        verifierComment: item.verifierComment,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt
+      };
+    } else if (verification.itemType === 'EDUCATION') {
+      itemDetails = {
+        ...itemDetails,
+        courseName: item.courseName,
+        institution: item.institution,
+        degree: item.degree,
+        fieldOfStudy: item.fieldOfStudy,
+        grade: item.grade,
+        passingYear: item.passingYear,
+        startDate: item.startDate,
+        endDate: item.endDate,
+        verified: item.verified,
+        verifiedAt: item.verifiedAt,
+        verifiedBy: item.verifiedBy,
+        verifierComment: item.verifierComment,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt
+      };
+    } 
+
     const request = {
       _id: verification._id,
       status: verification.status,
@@ -295,16 +398,8 @@ router.get('/request/:requestId', requireAuth, requireVerifier, async (req, res)
       comment: verification.comment,
       createdAt: verification.createdAt,
       actedAt: verification.actedAt,
-      item: {
-        id: item._id,
-        type: verification.itemType,
-        title: item.title || item.courseName || item.projectName,
-        description: item.description,
-        startDate: item.startDate,
-        endDate: item.endDate,
-        passingYear: item.passingYear,
-        files: item.attachments || []
-      },
+      expiresAt: verification.expiresAt,
+      item: itemDetails,
       student: {
         id: item.userId._id,
         name: item.userId.name,
@@ -602,8 +697,8 @@ router.get('/student/:studentId', requireAuth, requireVerifier, requireSameInsti
 
     // Get all items for this student
     const [experiences, education, projects] = await Promise.all([
-      Experience.find({ userId: studentId }).select('title description verified verifiedBy verifiedAt createdAt'),
-      Education.find({ userId: studentId }).select('courseName description verified verifiedBy verifiedAt createdAt'),
+      Experience.find({ userId: studentId }).select('title description verified verifiedBy verifiedAt verifierName verifierOrganization createdAt'),
+      Education.find({ userId: studentId }).select('courseName description verified verifiedBy verifiedAt verifierName verifierOrganization createdAt'),
       GithubProject.find({ userId: studentId }).select('projectName description verified verifiedBy verifiedAt createdAt')
     ]);
 
@@ -615,7 +710,8 @@ router.get('/student/:studentId', requireAuth, requireVerifier, requireSameInsti
         title: exp.title,
         description: exp.description,
         verified: exp.verified,
-        verifier: exp.verifiedBy,
+        verifier: exp.verifierName || exp.verifiedBy,
+        verifierOrganization: exp.verifierOrganization || null,
         verifiedAt: exp.verifiedAt,
         createdAt: exp.createdAt
       })),
@@ -625,7 +721,8 @@ router.get('/student/:studentId', requireAuth, requireVerifier, requireSameInsti
         title: edu.courseName,
         description: edu.description,
         verified: edu.verified,
-        verifier: edu.verifiedBy,
+        verifier: edu.verifierName || edu.verifiedBy,
+        verifierOrganization: edu.verifierOrganization || null,
         verifiedAt: edu.verifiedAt,
         createdAt: edu.createdAt
       })),

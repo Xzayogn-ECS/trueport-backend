@@ -231,7 +231,9 @@ router.get('/:token', async (req, res) => {
         email: verifier.email,
         institute: verifier.institute
       } : {
-        email: verification.verifierEmail
+        email: verification.verifierEmail,
+        name: verification.verifierName || null,
+        organization: verification.verifierOrganization || null
       },
       itemType: verification.itemType,
       item: {

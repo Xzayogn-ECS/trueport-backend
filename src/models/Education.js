@@ -83,6 +83,16 @@ const educationSchema = new mongoose.Schema({
     trim: true,
     maxLength: 200
   },
+  verifierName: {
+    type: String,
+    trim: true,
+    maxLength: 200
+  },
+  verifierOrganization: {
+    type: String,
+    trim: true,
+    maxLength: 200
+  },
   verifierComment: {
     type: String,
     trim: true,

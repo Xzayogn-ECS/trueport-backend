@@ -24,6 +24,15 @@ const verificationSchema = new mongoose.Schema({
     trim: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
+  // Store verifier name and organization/institution for proof on profile
+  verifierName: {
+    type: String,
+    trim: true
+  },
+  verifierOrganization: {
+    type: String,
+    trim: true
+  },
   token: {
     type: String,
     required: true,
@@ -46,6 +55,18 @@ const verificationSchema = new mongoose.Schema({
   },
   actedAt: {
     type: Date
+  },
+  // New friendly decision fields
+  decidedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  decidedAt: {
+    type: Date
+  },
+  decisionComment: {
+    type: String,
+    maxLength: 1000
   },
   expiresAt: {
     type: Date,

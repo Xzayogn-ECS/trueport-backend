@@ -121,7 +121,7 @@ router.get('/pending', requireAuth, async (req, res) => {
     }
 
     const requests = await AssociationRequest.findPendingForInstitute(verifier.institute);
-
+    console.log(requests);
     const formattedRequests = requests.map(request => ({
       id: request._id,
       student: {

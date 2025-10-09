@@ -23,7 +23,7 @@ const createDefaultSuperAdmin = async () => {
     const defaultAdmin = new SuperAdmin({
       name: 'TruePortMe Admin',
       email: 'admin@trueportme.com',
-      passwordHash: 'admin123456', // This will be hashed by the pre-save middleware
+      passwordHash: 'Admin@123', // This will be hashed by the pre-save middleware
       permissions: {
         manageInstitutions: true,
         manageInstituteAdmins: true,

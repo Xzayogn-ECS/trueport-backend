@@ -12,7 +12,7 @@ router.get('/:userId', async (req, res) => {
   try {
     // Get user info with portfolio settings
     const user = await User.findById(req.params.userId)
-      .select('name email githubUsername bio institute profileJson createdAt role portfolioSettings contactInfo contactVisibility');
+      .select('name email githubUsername bio institute profileJson createdAt role portfolioSettings contactInfo contactVisibility customUrls');
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -36,7 +36,8 @@ router.get('/:userId', async (req, res) => {
       email: true,
       phone: false,
       linkedinUrl: true,
-      githubUsername: true
+      githubUsername: true,
+      customUrls: true
     };
 
     // Check portfolio visibility
@@ -94,6 +95,23 @@ router.get('/:userId', async (req, res) => {
     if (contactVisibility.githubUsername && user.githubUsername) {
       response.user.contactInfo.githubUsername = user.githubUsername;
       hasVisibleContactInfo = true;
+    }
+
+    // Add custom URLs if visible
+    if (contactVisibility.customUrls && user.customUrls && user.customUrls.length > 0) {
+      // Filter to only visible custom URLs and sort by order
+      const visibleCustomUrls = user.customUrls
+        .filter(url => url.isVisible !== false)
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map(url => ({
+          label: url.label,
+          url: url.url
+        }));
+      
+      if (visibleCustomUrls.length > 0) {
+        response.user.contactInfo.customUrls = visibleCustomUrls;
+        hasVisibleContactInfo = true;
+      }
     }
 
     // Remove contactInfo object if no contact information is visible

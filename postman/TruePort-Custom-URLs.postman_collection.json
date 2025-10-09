@@ -1,0 +1,470 @@
+{
+  "info": {
+    "name": "TruePort Custom URLs API",
+    "description": "API endpoints for managing custom URLs in user profiles",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "url_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('token', response.token);",
+                  "    pm.collectionVariables.set('user_id', response.user._id);",
+                  "    console.log('Token saved:', response.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@university.edu\",\n  \"password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Custom URLs Management",
+      "item": [
+        {
+          "name": "Get All Custom URLs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "Add Behance Portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('url_id', response.customUrl._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Behance Portfolio\",\n  \"url\": \"https://behance.net/username\",\n  \"icon\": \"behance\",\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "Add Medium Blog",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Medium Blog\",\n  \"url\": \"https://medium.com/@username\",\n  \"icon\": \"medium\",\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "Add LeetCode Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"LeetCode Profile\",\n  \"url\": \"https://leetcode.com/username\",\n  \"icon\": \"code\",\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "Add Personal Website",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Personal Website\",\n  \"url\": \"https://myportfolio.com\",\n  \"icon\": \"globe\",\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "Update Custom URL",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Updated Label\",\n  \"url\": \"https://updated-url.com\",\n  \"icon\": \"new-icon\",\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls/{{url_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls", "{{url_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Custom URL",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls/{{url_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls", "{{url_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Reorder Custom URLs",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderedIds\": [\n    \"url_id_3\",\n    \"url_id_1\",\n    \"url_id_2\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls/reorder",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls", "reorder"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Custom URLs Visibility",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls/visibility",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls", "visibility"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Portfolio View",
+      "item": [
+        {
+          "name": "Get Public Portfolio (with Custom URLs)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/portfolio/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["portfolio", "{{user_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Complete Workflow Example",
+      "item": [
+        {
+          "name": "1. Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('token', response.token);",
+                  "    pm.collectionVariables.set('user_id', response.user._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@university.edu\",\n  \"password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "2. Add Behance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Behance Portfolio\",\n  \"url\": \"https://behance.net/johndoe\",\n  \"icon\": \"behance\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "3. Add Medium",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Medium Blog\",\n  \"url\": \"https://medium.com/@johndoe\",\n  \"icon\": \"medium\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "4. Add LeetCode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"LeetCode\",\n  \"url\": \"https://leetcode.com/johndoe\",\n  \"icon\": \"code\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "5. View All URLs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/custom-urls",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me", "custom-urls"]
+            }
+          }
+        },
+        {
+          "name": "6. View in Portfolio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/portfolio/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["portfolio", "{{user_id}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

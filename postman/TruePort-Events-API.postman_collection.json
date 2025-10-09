@@ -1,0 +1,574 @@
+{
+  "info": {
+    "name": "TruePort Events API",
+    "description": "Complete API collection for Events System - Create events, add participants, push verified experiences",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "verifier_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "student_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "event_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Institute Admin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('admin_token', response.token);",
+                  "    console.log('Admin token saved:', response.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@university.edu\",\n  \"password\": \"your_password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/institute-admin/login",
+              "host": ["{{base_url}}"],
+              "path": ["institute-admin", "login"]
+            }
+          }
+        },
+        {
+          "name": "Student Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('student_token', response.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@university.edu\",\n  \"password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events - Admin/Verifier",
+      "item": [
+        {
+          "name": "Create Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('event_id', response.event._id);",
+                  "    console.log('Event created with ID:', response.event._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Annual Hackathon 2025\",\n  \"description\": \"24-hour coding competition focusing on AI and ML projects\",\n  \"eventType\": \"HACKATHON\",\n  \"organizer\": {\n    \"name\": \"CS Department\",\n    \"email\": \"cs@university.edu\"\n  },\n  \"startDate\": \"2025-03-15T09:00:00Z\",\n  \"endDate\": \"2025-03-16T09:00:00Z\",\n  \"location\": \"Main Auditorium\",\n  \"tags\": [\"AI\", \"ML\", \"Coding\", \"Competition\"],\n  \"awards\": [\n    {\n      \"position\": \"1st Place\",\n      \"title\": \"Champion\",\n      \"description\": \"$5000 prize and internship opportunity\"\n    },\n    {\n      \"position\": \"2nd Place\",\n      \"title\": \"Runner Up\",\n      \"description\": \"$2000 prize\"\n    },\n    {\n      \"position\": \"Participant\",\n      \"title\": \"Certificate of Participation\"\n    }\n  ],\n  \"status\": \"DRAFT\",\n  \"isPublic\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events",
+              "host": ["{{base_url}}"],
+              "path": ["events"]
+            }
+          }
+        },
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["events"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "PUBLISHED",
+                  "disabled": true
+                },
+                {
+                  "key": "eventType",
+                  "value": "HACKATHON",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "hackathon",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Event by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Event",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Event Title\",\n  \"status\": \"PUBLISHED\",\n  \"description\": \"Updated description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Event",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Participants",
+      "item": [
+        {
+          "name": "Add Participants",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"participants\": [\n    {\n      \"userId\": \"60d5ec49f1b2c72b8c8e4a01\",\n      \"role\": \"Winner\",\n      \"position\": \"1st Place\",\n      \"teamName\": \"Code Warriors\",\n      \"certificate\": \"https://example.com/cert1.pdf\"\n    },\n    {\n      \"userId\": \"60d5ec49f1b2c72b8c8e4a02\",\n      \"role\": \"Winner\",\n      \"position\": \"2nd Place\",\n      \"teamName\": \"Tech Titans\"\n    },\n    {\n      \"userId\": \"60d5ec49f1b2c72b8c8e4a03\",\n      \"role\": \"Participant\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/participants",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}", "participants"]
+            }
+          }
+        },
+        {
+          "name": "Remove Participant",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/participants/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}", "participants", "{{user_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Push Experiences",
+      "item": [
+        {
+          "name": "Push to All Participants",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/push-experiences",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}", "push-experiences"]
+            }
+          }
+        },
+        {
+          "name": "Push to Selected Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\n    \"60d5ec49f1b2c72b8c8e4a01\",\n    \"60d5ec49f1b2c72b8c8e4a02\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/push-experiences",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}", "push-experiences"]
+            }
+          }
+        },
+        {
+          "name": "Push with Custom Description",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDescription\": \"Outstanding performance in the annual hackathon with innovative AI solution\",\n  \"customRole\": \"Award Winner\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/push-experiences",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}", "push-experiences"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events - Student View",
+      "item": [
+        {
+          "name": "Get Public Events",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events/public/list?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["events", "public", "list"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "eventType",
+                  "value": "HACKATHON",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "AI",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Events",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events/my/events",
+              "host": ["{{base_url}}"],
+              "path": ["events", "my", "events"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Complete Workflow Examples",
+      "item": [
+        {
+          "name": "1. Create Competition Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('event_id', response.event._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Coding Championship 2025\",\n  \"description\": \"University-wide coding competition\",\n  \"eventType\": \"COMPETITION\",\n  \"startDate\": \"2025-03-15T09:00:00Z\",\n  \"endDate\": \"2025-03-15T18:00:00Z\",\n  \"status\": \"DRAFT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events",
+              "host": ["{{base_url}}"],
+              "path": ["events"]
+            }
+          }
+        },
+        {
+          "name": "2. Add Winners",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"participants\": [\n    {\n      \"userId\": \"{{user_id}}\",\n      \"role\": \"Winner\",\n      \"position\": \"1st Place\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/participants",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}", "participants"]
+            }
+          }
+        },
+        {
+          "name": "3. Publish Event",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PUBLISHED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}"]
+            }
+          }
+        },
+        {
+          "name": "4. Push Verified Experiences",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/push-experiences",
+              "host": ["{{base_url}}"],
+              "path": ["events", "{{event_id}}", "push-experiences"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

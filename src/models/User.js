@@ -99,6 +99,37 @@ const userSchema = new mongoose.Schema({
       }
     }
   },
+  customUrls: [{
+    label: {
+      type: String,
+      required: true,
+      trim: true,
+      maxLength: 50 // e.g., "Behance", "Medium", "LeetCode", "Personal Website"
+    },
+    url: {
+      type: String,
+      required: true,
+      trim: true,
+      validate: {
+        validator: function(v) {
+          return /^https?:\/\/.+/.test(v);
+        },
+        message: 'Please enter a valid URL (must start with http:// or https://)'
+      }
+    },
+    isVisible: {
+      type: Boolean,
+      default: true
+    },
+    order: {
+      type: Number,
+      default: 0 // For custom ordering
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   contactVisibility: {
     email: {
       type: Boolean,
@@ -115,6 +146,10 @@ const userSchema = new mongoose.Schema({
     githubUsername: {
       type: Boolean,
       default: true
+    },
+    customUrls: {
+      type: Boolean,
+      default: true // Show custom URLs by default
     }
   },
   institute: {
