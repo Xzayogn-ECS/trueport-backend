@@ -9,7 +9,8 @@ router.get('/me', requireAuth, async (req, res) => {
   try {
     // Explicitly fetch user with all contact fields to ensure they're included
     const user = await User.findById(req.user._id)
-      .select('-passwordHash -githubToken');
+      .select('-passwordHash -githubToken')
+      .populate('createdInstitutions', 'name displayName logo status kycVerified createdAt');
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -545,49 +546,57 @@ router.put('/me', requireAuth, async (req, res) => {
 // Get list of institutions for association requests
 router.get('/institutions', async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, page = 1, limit = 100 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Build match criteria
-    const matchCriteria = {
-      institute: { $exists: true, $ne: null, $ne: '' },
-      associationStatus: 'APPROVED' // Only show institutions with approved users
+    const Institution = require('../models/Institution');
+
+    // Build query for ACTIVE institutions
+    const query = {
+      status: 'ACTIVE'
     };
 
     // Add search if provided
     if (search && search.trim().length > 0) {
-      matchCriteria.institute = { 
-        $regex: search.trim(), 
-        $options: 'i' 
-      };
+      query.$or = [
+        { name: { $regex: search.trim(), $options: 'i' } },
+        { displayName: { $regex: search.trim(), $options: 'i' } }
+      ];
     }
 
-    // Get unique institution names with verifier count
-    const institutions = await User.aggregate([
-      { $match: matchCriteria },
-      {
-        $group: {
-          _id: '$institute',
-          verifierCount: { 
-            $sum: { $cond: [{ $eq: ['$role', 'VERIFIER'] }, 1, 0] } 
-          }
-        }
-      },
-      { $match: { verifierCount: { $gt: 0 } } }, // Only institutions with verifiers
-      { $sort: { _id: 1 } },
-      { $limit: 100 }, // Limit to 100 institutions
-      {
-        $project: {
-          id: { $toString: '$_id' }, // Use institution name as ID
-          name: '$_id',
-          verifierCount: 1,
-          _id: 0
-        }
-      }
-    ]);
+    // Get institutions
+    const institutions = await Institution.find(query)
+      .select('name displayName logo description website address kycVerified claimed createdByUser createdAt')
+      .sort({ name: 1 })
+      .limit(parseInt(limit))
+      .skip(skip);
+
+    const total = await Institution.countDocuments(query);
 
     res.json({
-      institutions,
-      total: institutions.length
+      institutions: institutions.map(inst => ({
+        id: inst._id,
+        name: inst.name,
+        displayName: inst.displayName,
+        logo: inst.logo,
+        description: inst.description,
+        website: inst.website,
+        address: {
+          district: inst.address?.district || '',
+          state: inst.address?.state || ''
+        },
+        claimed: inst.claimed,
+        kycVerified: inst.kycVerified,
+        createdByUser: inst.createdByUser,
+        createdAt: inst.createdAt
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      },
+      total
     });
 
   } catch (error) {

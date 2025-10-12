@@ -1,0 +1,11 @@
+name,displayName,description,website,logo,district,state,email,phone
+"Indian Institute of Technology Bombay","IIT Bombay","Premier engineering and technology institution","https://www.iitb.ac.in","","Mumbai","Maharashtra","info@iitb.ac.in","+91-22-2572-2545"
+"University of Mumbai","Mumbai University","Public state university in Mumbai","https://www.mu.ac.in","","Mumbai","Maharashtra","info@mu.ac.in","+91-22-2652-4084"
+"Delhi University","University of Delhi","Central university in Delhi","https://www.du.ac.in","","New Delhi","Delhi","info@du.ac.in","+91-11-2766-7853"
+"Indian Institute of Technology Delhi","IIT Delhi","Premier engineering institution in Delhi","https://home.iitd.ac.in","","New Delhi","Delhi","info@iitd.ac.in","+91-11-2659-1749"
+"Anna University","Anna University Chennai","State technical university in Tamil Nadu","https://www.annauniv.edu","","Chennai","Tamil Nadu","info@annauniv.edu","+91-44-2235-8712"
+"Jadavpur University","Jadavpur University","Public research university in Kolkata","https://www.jadavpuruniversity.in","","Kolkata","West Bengal","info@jadavpuruniversity.in","+91-33-2414-6666"
+"Pune University","Savitribai Phule Pune University","State university in Pune","https://www.unipune.ac.in","","Pune","Maharashtra","info@unipune.ac.in","+91-20-2560-1205"
+"Bangalore University","Bangalore University","State university in Karnataka","https://www.bangaloreuniversity.ac.in","","Bangalore","Karnataka","info@bangaloreuniversity.ac.in","+91-80-2296-1301"
+"Hyderabad University","University of Hyderabad","Central research university","https://www.uohyd.ac.in","","Hyderabad","Telangana","info@uohyd.ac.in","+91-40-2313-4000"
+"Jawaharlal Nehru University","JNU Delhi","Central research university in New Delhi","https://www.jnu.ac.in","","New Delhi","Delhi","info@jnu.ac.in","+91-11-2670-4000"

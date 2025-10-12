@@ -62,6 +62,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     await project.save();
     await project.populate('userId', 'name email');
+    await project.populate('linkedCollaborators.userId', 'name email profilePicture');
 
     res.status(201).json({
       message: 'Project created successfully',
@@ -123,6 +124,7 @@ router.get('/', requireAuth, async (req, res) => {
 
     const projects = await Project.find(query)
       .populate('userId', 'name email')
+      .populate('linkedCollaborators.userId', 'name email profilePicture')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -152,7 +154,8 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
-      .populate('userId', 'name email githubUsername');
+      .populate('userId', 'name email githubUsername')
+      .populate('linkedCollaborators.userId', 'name email profilePicture');
 
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
@@ -206,6 +209,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     // Update project with new data
     Object.assign(project, req.body);
     await project.save();
+    await project.populate('linkedCollaborators.userId', 'name email profilePicture');
 
     res.json({
       message: 'Project updated successfully',

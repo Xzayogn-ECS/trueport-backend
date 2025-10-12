@@ -177,6 +177,13 @@ const userSchema = new mongoose.Schema({
       showInstitute: { type: Boolean, default: true }
     }
   },
+  
+  // Institutions created by this user
+  createdInstitutions: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Institution'
+  }],
+  
   createdAt: {
     type: Date,
     default: Date.now

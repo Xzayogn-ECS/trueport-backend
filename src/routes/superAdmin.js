@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const SuperAdmin = require('../models/SuperAdmin');
 const InstituteAdmin = require('../models/InstituteAdmin');
 const Institution = require('../models/Institution');
@@ -262,6 +263,25 @@ router.get('/institutions', requireSuperAdmin, async (req, res) => {
       message: 'Failed to fetch institutions',
       error: error.message
     });
+  }
+});
+
+// Get single institution details (super admin)
+router.get('/institutions/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid institution ID' });
+    }
+    const institution = await Institution.findById(id)
+      .populate('createdBy', 'name email');
+    if (!institution) {
+      return res.status(404).json({ message: 'Institution not found' });
+    }
+    res.json({ institution });
+  } catch (error) {
+    console.error('Get institution (admin) error:', error);
+    res.status(500).json({ message: 'Failed to fetch institution', error: error.message });
   }
 });
 

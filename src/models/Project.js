@@ -190,6 +190,7 @@ const projectSchema = new mongoose.Schema({
     default: 1
   },
   
+  // Legacy text-based collaborators (kept for backward compatibility)
   collaborators: [{
     name: {
       type: String,
@@ -204,6 +205,25 @@ const projectSchema = new mongoose.Schema({
     email: {
       type: String,
       trim: true
+    }
+  }],
+  
+  // New: Linked collaborators (verified users with accounts)
+  linkedCollaborators: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    role: {
+      type: String,
+      required: true,
+      trim: true,
+      maxLength: 100
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now
     }
   }],
   

@@ -14,6 +14,11 @@ const institutionSchema = new mongoose.Schema({
     trim: true,
     maxLength: 200
   },
+  institutionType: {
+    type: String,
+    enum: ['SCHOOL', 'COLLEGE_UNIVERSITY', 'NGO', 'COMPANY', 'GOVT_BODY'],
+    required: true
+  },
   description: {
     type: String,
     trim: true,
@@ -29,11 +34,16 @@ const institutionSchema = new mongoose.Schema({
     trim: true
   },
   address: {
-    street: String,
-    city: String,
-    state: String,
-    zipCode: String,
-    country: String
+    district: {
+      type: String,
+      trim: true,
+      maxLength: 100
+    },
+    state: {
+      type: String,
+      trim: true,
+      maxLength: 100
+    }
   },
   contactInfo: {
     email: {
@@ -81,10 +91,37 @@ const institutionSchema = new mongoose.Schema({
     enum: ['ACTIVE', 'SUSPENDED', 'INACTIVE'],
     default: 'ACTIVE'
   },
+  claimed: {
+    type: Boolean,
+    default: false
+  },
+  claimedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  claimedAt: {
+    type: Date
+  },
+  importedFromCSV: {
+    type: Boolean,
+    default: false
+  },
+  kycVerified: {
+    type: Boolean,
+    default: false
+  },
+  createdByUser: {
+    type: Boolean,
+    default: false
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'SuperAdmin',
-    required: true
+    refPath: 'createdByModel'
+  },
+  createdByModel: {
+    type: String,
+    enum: ['SuperAdmin', 'User'],
+    default: 'SuperAdmin'
   },
   createdAt: {
     type: Date,

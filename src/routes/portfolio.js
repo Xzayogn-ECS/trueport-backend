@@ -139,13 +139,44 @@ router.get('/:userId', async (req, res) => {
       }).sort({ passingYear: -1, createdAt: -1 });
     }
 
-    // Get projects (only public ones, no verification needed)
+    // Get projects (owned + collaborated)
     let projects = [];
     if (settings.sections.showProjects) {
-      projects = await Project.find({
+      // Get projects owned by user
+      const ownedProjects = await Project.find({
         userId: req.params.userId,
         isPublic: true
-      }).sort({ createdAt: -1 });
+      })
+        .populate('linkedCollaborators.userId', 'name email profilePicture')
+        .sort({ createdAt: -1 });
+
+      // Get projects where user is a collaborator
+      const collaboratedProjects = await Project.find({
+        'linkedCollaborators.userId': req.params.userId,
+        isPublic: true
+      })
+        .populate('userId', 'name email profilePicture')
+        .populate('linkedCollaborators.userId', 'name email profilePicture')
+        .sort({ createdAt: -1 });
+
+      // Combine and add ownership flag
+      projects = [
+        ...ownedProjects.map(p => ({
+          ...p.toObject(),
+          isOwner: true,
+          myRole: null
+        })),
+        ...collaboratedProjects.map(p => {
+          const myCollabRole = p.linkedCollaborators.find(
+            c => c.userId._id.toString() === req.params.userId
+          );
+          return {
+            ...p.toObject(),
+            isOwner: false,
+            myRole: myCollabRole?.role || 'Collaborator'
+          };
+        })
+      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
 
     // Get GitHub repositories if GitHub username is available, section is enabled, and GitHub username is visible

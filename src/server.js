@@ -21,6 +21,8 @@ const verificationActionsRoutes = require('./routes/verificationActions');
 const verifierInviteRoutes = require('./routes/verifierInvites');
 const portfolioRoutes = require('./routes/portfolio');
 const githubRoutes = require('./routes/github');
+const collaborationRoutes = require('./routes/collaborations');
+const institutionClaimRoutes = require('./routes/institutionClaims');
 
 // Admin routes
 const superAdminRoutes = require('./routes/superAdmin');
@@ -89,6 +91,8 @@ app.use('/api/verifications', verificationActionsRoutes);
 app.use('/api/verifier-invites', verifierInviteRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/collaborations', collaborationRoutes);
+app.use('/api/institution-create', institutionClaimRoutes);
 
 // Admin routes
 app.use('/api/super-admin', superAdminRoutes);
