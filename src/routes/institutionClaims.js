@@ -36,19 +36,10 @@ router.post('/', requireAuth, async (req, res) => {
     if (!validTypes.includes(selectedType)) {
       return res.status(400).json({ message: 'Invalid institution type' });
     }
-    const validDistricts = await Institution.distinct('address.district');
-    const validStates = await Institution.distinct('address.state');
-    if (!validDistricts.includes(district.trim())) {
-      return res.status(400).json({ message: 'Invalid district' });
-    }
-    if (!validStates.includes(state.trim())) {
-      return res.status(400).json({ message: 'Invalid state' });
-    }
-
     // Check if institution already exists
     const existingInstitution = await Institution.findOne({
       name: name.trim()
-    });
+    }); 
 
     if (existingInstitution) {
       return res.status(400).json({

@@ -163,14 +163,17 @@ router.post('/institutions', requireSuperAdmin, async (req, res) => {
       description,
       website,
       logo,
-      address,
+      district,
+      state,
+      institutionType,
       contactInfo,
       settings
     } = req.body;
+    console.log(req.body);
 
-    if (!name || !displayName) {
+    if (!name || !displayName || !institutionType || !district || !state) {
       return res.status(400).json({
-        message: 'Institution name and display name are required'
+        message: 'Institution name, display name, type, district, and state are required'
       });
     }
 
@@ -188,17 +191,19 @@ router.post('/institutions', requireSuperAdmin, async (req, res) => {
     const institution = new Institution({
       name: name.trim(),
       displayName: displayName.trim(),
+      institutionType: institutionType.trim().toUpperCase(),
       description,
       website,
       logo,
-      address,
+      address: { district: district.trim(), state: state.trim() },
       contactInfo,
       settings: {
         allowSelfRegistration: settings?.allowSelfRegistration ?? true,
         requireVerifierApproval: settings?.requireVerifierApproval ?? true,
         maxUsersLimit: settings?.maxUsersLimit ?? 1000
       },
-      createdBy: req.admin._id
+      createdBy: req.admin._id,
+      createdByModel: 'SuperAdmin'
     });
 
     await institution.save();
@@ -425,6 +430,35 @@ router.post('/institute-admins', requireSuperAdmin, async (req, res) => {
       message: 'Failed to create institute admin',
       error: error.message
     });
+  }
+});
+
+// Approve user-created institution (super admin)
+router.post('/institutions/:id/approve', requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid institution ID' });
+    }
+    const institution = await Institution.findById(id);
+    if (!institution) {
+      return res.status(404).json({ message: 'Institution not found' });
+    }
+    if (!institution.createdByUser) {
+      return res.status(400).json({ message: 'Only user-created institutions can be approved here' });
+    }
+    if (institution.status === 'ACTIVE') {
+      return res.status(400).json({ message: 'Institution is already active' });
+    }
+    // Approve the institution
+    institution.status = 'ACTIVE';
+    institution.kycVerified = true;
+    institution.updatedAt = new Date();
+    await institution.save();
+    res.json({ message: 'Institution approved successfully', institution });
+  } catch (error) {
+    console.error('Approve institution error:', error);
+    res.status(500).json({ message: 'Failed to approve institution', error: error.message });
   }
 });
 
