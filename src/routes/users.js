@@ -168,7 +168,6 @@ router.put('/me/contact-visibility', requireAuth, async (req, res) => {
   }
 });
 
-
 // Get all custom URLs for current user
 router.get('/me/custom-urls', requireAuth, async (req, res) => {
   try {
@@ -1206,7 +1205,7 @@ router.get('/me/portfolio-items', requireAuth, async (req, res) => {
 
     // Get all experiences with visibility status
     const experiences = await Experience.find({ userId: req.user._id })
-      .select('title description role startDate endDate verified isPublic verifierName verifierOrganization createdAt')
+      .select('title description role organization startDate endDate verified isPublic verifierName verifierOrganization createdAt')
       .sort({ createdAt: -1 });
 
     // Get all education entries with visibility status
@@ -1225,7 +1224,7 @@ router.get('/me/portfolio-items', requireAuth, async (req, res) => {
         id: exp._id,
         title: exp.title,
         description: exp.description,
-        role: exp.role,
+        organization: exp.organization,
         startDate: exp.startDate,
         endDate: exp.endDate,
         verified: exp.verified,

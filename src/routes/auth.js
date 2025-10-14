@@ -13,41 +13,46 @@ router.post('/register', async (req, res) => {
 
     // Validation
     if (!name || !email || !password) {
-      return res.status(400).json({ 
-        message: 'Name, email, and password are required' 
+      return res.status(400).json({
+        message: 'Name, email, and password are required'
       });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ 
-        message: 'Password must be at least 6 characters long' 
+    // Password strength regex: 8+ chars, 1 upper, 1 lower, 1 number, 1 special
+    const strongPasswordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
+
+    if (!strongPasswordRegex.test(password)) {
+      return res.status(400).json({
+        message:
+          'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character'
       });
     }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ 
-        message: 'User with this email already exists' 
+      return res.status(400).json({
+        message: 'User with this email already exists'
       });
     }
 
-    // Create user with default role as STUDENT
+    // Create user
     const user = new User({
       name,
       email,
-      passwordHash: password, // Will be hashed by pre-save middleware
-      role: 'STUDENT', // Default role
-      profileSetupComplete: false // Flag to track if user completed profile setup
+      passwordHash: password, // hashed via middleware
+      role: 'STUDENT',
+      profileSetupComplete: false
     });
 
     await user.save();
 
-    // Generate JWT
-    const token = generateToken({ 
-      userId: user._id, 
-      email: user.email, 
-      role: user.role 
+    // JWT
+    const token = generateToken({
+      userId: user._id,
+      email: user.email,
+      role: user.role
     });
 
     res.status(201).json({
@@ -58,24 +63,24 @@ router.post('/register', async (req, res) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    
+
     if (error.code === 11000) {
-      return res.status(400).json({ 
-        message: 'User with this email already exists' 
-      });
-    }
-    
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({ 
-        message: 'Validation error', 
-        errors: messages 
+      return res.status(400).json({
+        message: 'User with this email already exists'
       });
     }
 
-    res.status(500).json({ 
-      message: 'Registration failed', 
-      error: error.message 
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        message: 'Validation error',
+        errors: messages
+      });
+    }
+
+    res.status(500).json({
+      message: 'Registration failed',
+      error: error.message
     });
   }
 });

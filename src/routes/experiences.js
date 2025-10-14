@@ -8,12 +8,12 @@ const router = express.Router();
 // Create new experience
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { title, description, role, startDate, endDate, tags, attachments } = req.body;
+    const { title, description, organization, startDate, endDate, tags, attachments } = req.body;
 
     // Validation
-    if (!title || !description || !role || !startDate) {
+    if (!title || !description || !organization || !startDate) {
       return res.status(400).json({ 
-        message: 'Title, description, role, and start date are required' 
+        message: 'Title, description, organization, and start date are required' 
       });
     }
 
@@ -33,7 +33,7 @@ router.post('/', requireAuth, async (req, res) => {
       userId: req.user._id,
       title: title.trim(),
       description: description.trim(),
-      role: role.trim(),
+      organization: organization.trim(),
       startDate: start,
       endDate: end,
       tags: tags ? tags.map(tag => tag.trim()).filter(tag => tag) : [],
@@ -159,7 +159,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
 
     const updates = {};
-    const allowedUpdates = ['title', 'description', 'role', 'startDate', 'endDate', 'tags', 'attachments'];
+    const allowedUpdates = ['title', 'description', 'organization', 'startDate', 'endDate', 'tags', 'attachments'];
     
     allowedUpdates.forEach(field => {
       if (req.body[field] !== undefined) {

@@ -18,11 +18,11 @@ const experienceSchema = new mongoose.Schema({
     required: true,
     maxLength: 2000
   },
-  role: {
+  organization: {
     type: String,
     required: true,
     trim: true,
-    maxLength: 100
+    maxLength: 200
   },
   startDate: {
     type: Date,

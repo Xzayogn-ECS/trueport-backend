@@ -697,7 +697,7 @@ router.get('/student/:studentId', requireAuth, requireVerifier, requireSameInsti
 
     // Get all items for this student
     const [experiences, education, projects] = await Promise.all([
-      Experience.find({ userId: studentId }).select('title description verified verifiedBy verifiedAt verifierName verifierOrganization createdAt'),
+      Experience.find({ userId: studentId }).select('title description role organization verified verifiedBy verifiedAt verifierName verifierOrganization createdAt'),
       Education.find({ userId: studentId }).select('courseName description verified verifiedBy verifiedAt verifierName verifierOrganization createdAt'),
       GithubProject.find({ userId: studentId }).select('projectName description verified verifiedBy verifiedAt createdAt')
     ]);
