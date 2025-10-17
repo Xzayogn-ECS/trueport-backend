@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const { generateToken } = require('../utils/jwt');
 
-const router = express.Router();
+const router = express.Router(); 
 
 // Register - Simplified registration without role/institute
 router.post('/register', async (req, res) => {
