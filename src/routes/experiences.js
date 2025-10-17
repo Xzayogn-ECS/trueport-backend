@@ -1,7 +1,12 @@
 const express = require('express');
 const Experience = require('../models/Experience');
+const Verification = require('../models/Verification');
+const VerificationLog = require('../models/VerificationLog');
+const User = require('../models/User');
 const { requireAuth } = require('../middlewares/auth');
 const { upload } = require('../utils/cloudinary');
+const { generateVerificationToken } = require('../utils/jwt');
+const { sendVerificationEmail } = require('../utils/email');
 
 const router = express.Router();
 
@@ -43,10 +48,71 @@ router.post('/', requireAuth, async (req, res) => {
     await experience.save();
     await experience.populate('userId', 'name email');
 
-    res.status(201).json({
+    // Optionally create a verification request if requested by client
+    let createdVerification = null;
+    try {
+      const { requestVerification, verifierEmail } = req.body;
+      if ((requestVerification || verifierEmail) && !experience.verified) {
+        const verifierEmailLower = (verifierEmail || '').toLowerCase();
+        if (verifierEmailLower) {
+          const verifier = await User.findOne({ email: verifierEmailLower, role: 'VERIFIER' });
+          if (verifier) {
+            const student = await User.findById(req.user._id).select('institute name email');
+            if (student && student.institute && verifier.institute && student.institute === verifier.institute) {
+              // Check for existing pending verification
+              const existing = await Verification.findOne({
+                itemId: experience._id,
+                itemType: 'EXPERIENCE',
+                status: 'PENDING',
+                expiresAt: { $gt: new Date() }
+              });
+
+              if (!existing) {
+                const token = generateVerificationToken();
+                const verification = new Verification({
+                  itemId: experience._id,
+                  itemType: 'EXPERIENCE',
+                  verifierEmail: verifier.email.toLowerCase(),
+                  token
+                });
+                await verification.save();
+
+                await new VerificationLog({
+                  verificationId: verification._id,
+                  action: 'CREATED',
+                  actorEmail: req.user.email,
+                  metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EXPERIENCE' }
+                }).save();
+
+                try {
+                  await sendVerificationEmail(verifier.email, token, experience.title || 'Experience', student.name, 'EXPERIENCE');
+                } catch (e) {
+                  console.warn('Failed to send verification email for experience:', e.message || e);
+                }
+
+                createdVerification = verification;
+              }
+            }
+          }
+        }
+      }
+    } catch (vErr) {
+      console.warn('Verification creation for experience failed (non-fatal):', vErr.message || vErr);
+    }
+
+    const responsePayload = {
       message: 'Experience created successfully',
       experience
-    });
+    };
+    if (createdVerification) {
+      responsePayload.verification = {
+        id: createdVerification._id,
+        status: createdVerification.status,
+        expiresAt: createdVerification.expiresAt
+      };
+    }
+
+    res.status(201).json(responsePayload);
 
   } catch (error) {
     console.error('Create experience error:', error);
@@ -92,10 +158,49 @@ router.get('/', requireAuth, async (req, res) => {
       .skip(skip)
       .limit(limit);
 
+    // Attach verification info for each experience (bulk fetch)
+    const expIds = experiences.map(e => e._id);
+    const verifications = await Verification.find({ itemType: 'EXPERIENCE', itemId: { $in: expIds } }).sort({ createdAt: -1 });
+    const verMap = {};
+    const now = new Date();
+    for (const v of verifications) {
+      const key = v.itemId.toString();
+      const isPendingActive = v.status === 'PENDING' && v.expiresAt && v.expiresAt > now;
+      if (!verMap[key]) {
+        verMap[key] = v;
+      } else {
+        const cur = verMap[key];
+        const curPendingActive = cur.status === 'PENDING' && cur.expiresAt && cur.expiresAt > now;
+        // Prefer any active pending verification over others
+        if (!curPendingActive && isPendingActive) {
+          verMap[key] = v;
+        }
+        // otherwise keep the existing (sorted by createdAt desc)
+      }
+    }
+
+    const experiencesWithVerification = experiences.map(exp => {
+      const obj = exp.toObject();
+      const v = verMap[exp._id.toString()];
+      if (v) {
+        obj.verification = {
+          id: v._id,
+          status: v.status,
+          verifierEmail: v.verifierEmail,
+          expiresAt: v.expiresAt,
+          actedAt: v.actedAt,
+          comment: v.comment
+        };
+      }
+      // Friendly verificationStatus: prefer verification record, fallback to item boolean
+      obj.verificationStatus = v ? (v.status === 'PENDING' ? 'submitted' : (v.status === 'APPROVED' ? 'verified' : 'rejected')) : (exp.verified ? 'verified' : 'not_verified');
+      return obj;
+    });
+
     const total = await Experience.countDocuments(query);
 
     res.json({
-      experiences,
+      experiences: experiencesWithVerification,
       pagination: {
         page,
         limit,
@@ -123,7 +228,29 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Experience not found' });
     }
 
-    res.json({ experience });
+    // Attach verification (if any)
+    // Prefer active (non-expired) PENDING verification if available, otherwise latest
+    const now = new Date();
+    let verification = await Verification.findOne({ itemType: 'EXPERIENCE', itemId: experience._id, status: 'PENDING', expiresAt: { $gt: now } }).sort({ createdAt: -1 });
+    if (!verification) {
+      verification = await Verification.findOne({ itemType: 'EXPERIENCE', itemId: experience._id }).sort({ createdAt: -1 });
+    }
+    const expObj = experience.toObject();
+    if (verification) {
+      expObj.verification = {
+        id: verification._id,
+        status: verification.status,
+        verifierEmail: verification.verifierEmail,
+        expiresAt: verification.expiresAt,
+        actedAt: verification.actedAt,
+        comment: verification.comment
+      };
+      expObj.verificationStatus = verification.status === 'PENDING' ? 'submitted' : (verification.status === 'APPROVED' ? 'verified' : 'rejected');
+    } else {
+      expObj.verificationStatus = experience.verified ? 'verified' : 'not_verified';
+    }
+
+    res.json({ experience: expObj });
 
   } catch (error) {
     console.error('Get experience error:', error);
@@ -197,10 +324,67 @@ router.put('/:id', requireAuth, async (req, res) => {
       { new: true, runValidators: true }
     ).populate('userId', 'name email');
 
-    res.json({
+    // Optionally create a verification request after update if requested
+    let createdVerification = null;
+    try {
+      const { requestVerification, verifierEmail } = req.body;
+      if ((requestVerification || verifierEmail) && !updatedExperience.verified) {
+        const verifierEmailLower = (verifierEmail || '').toLowerCase();
+        if (verifierEmailLower) {
+          const verifier = await User.findOne({ email: verifierEmailLower, role: 'VERIFIER' });
+          const student = await User.findById(req.user._id).select('institute name email');
+          if (verifier && student && student.institute && verifier.institute && student.institute === verifier.institute) {
+            const existing = await Verification.findOne({
+              itemId: updatedExperience._id,
+              itemType: 'EXPERIENCE',
+              status: 'PENDING',
+              expiresAt: { $gt: new Date() }
+            });
+            if (!existing) {
+              const token = generateVerificationToken();
+              const verification = new Verification({
+                itemId: updatedExperience._id,
+                itemType: 'EXPERIENCE',
+                verifierEmail: verifier.email.toLowerCase(),
+                token
+              });
+              await verification.save();
+
+              await new VerificationLog({
+                verificationId: verification._id,
+                action: 'CREATED',
+                actorEmail: req.user.email,
+                metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EXPERIENCE' }
+              }).save();
+
+              try {
+                await sendVerificationEmail(verifier.email, token, updatedExperience.title || 'Experience', student.name, 'EXPERIENCE');
+              } catch (e) {
+                console.warn('Failed to send verification email for experience:', e.message || e);
+              }
+
+              createdVerification = verification;
+            }
+          }
+        }
+      }
+    } catch (vErr) {
+      console.warn('Verification creation on experience update failed (non-fatal):', vErr.message || vErr);
+    }
+
+    const responsePayload = {
       message: 'Experience updated successfully',
       experience: updatedExperience
-    });
+    };
+    if (createdVerification) {
+      responsePayload.verification = {
+        id: createdVerification._id,
+        status: createdVerification.status,
+        expiresAt: createdVerification.expiresAt
+      };
+    }
+
+    res.json(responsePayload);
 
   } catch (error) {
     console.error('Update experience error:', error);

@@ -2,6 +2,7 @@
   const User = require('../models/User');
   const Experience = require('../models/Experience');
   const Education = require('../models/Education');
+  const Verification = require('../models/Verification');
   const Project = require('../models/Project');
   const axios = require('axios');
 
@@ -119,24 +120,67 @@
         delete response.user.contactInfo;
       }
 
-      // Get verified experiences (only public ones)
+      // Get experiences (include unverified ones but mark their verification status)
       let experiences = [];
       if (settings.sections.showExperiences) {
-        experiences = await Experience.find({
+        const rawExperiences = await Experience.find({
           userId: req.params.userId,
-          verified: true,
           isPublic: true
-        }).sort({ verifiedAt: -1 });
+        }).sort({ verifiedAt: -1, createdAt: -1 });
+
+        experiences = rawExperiences.map(exp => {
+          const obj = exp.toObject();
+          obj.verificationStatus = exp.verified ? 'verified' : (exp.verified === false ? 'not_verified' : 'submitted');
+          // Keep existing verified flag for backward compatibility
+          return obj;
+        });
       }
 
-      // Get verified education entries (only public ones)
+      // Get education entries (include unverified ones but mark verification status)
       let education = [];
       if (settings.sections.showEducation) {
-        education = await Education.find({
+        const rawEducation = await Education.find({
           userId: req.params.userId,
-          verified: true,
           isPublic: true
         }).sort({ passingYear: -1, createdAt: -1 });
+
+        // Bulk fetch verifications for these education items and prefer active pending
+        const eduIds = rawEducation.map(e => e._id);
+        const eduVerifications = await Verification.find({ itemType: 'EDUCATION', itemId: { $in: eduIds } }).sort({ createdAt: -1 });
+        const eduVerMap = {};
+        const now = new Date();
+        for (const v of eduVerifications) {
+          const key = v.itemId.toString();
+          const isPendingActive = v.status === 'PENDING' && v.expiresAt && v.expiresAt > now;
+          if (!eduVerMap[key]) {
+            eduVerMap[key] = v;
+          } else {
+            const cur = eduVerMap[key];
+            const curPendingActive = cur.status === 'PENDING' && cur.expiresAt && cur.expiresAt > now;
+            if (!curPendingActive && isPendingActive) {
+              eduVerMap[key] = v;
+            }
+          }
+        }
+
+        education = rawEducation.map(ed => {
+          const obj = ed.toObject();
+          const v = eduVerMap[ed._id.toString()];
+          if (v) {
+            obj.verification = {
+              id: v._id,
+              status: v.status,
+              verifierEmail: v.verifierEmail,
+              expiresAt: v.expiresAt,
+              actedAt: v.actedAt,
+              comment: v.comment
+            };
+            obj.verificationStatus = v.status === 'PENDING' ? 'submitted' : (v.status === 'APPROVED' ? 'verified' : 'rejected');
+          } else {
+            obj.verificationStatus = ed.verified ? 'verified' : 'not_verified';
+          }
+          return obj;
+        });
       }
 
       // Get projects (owned + collaborated)
@@ -221,7 +265,7 @@
         totalProjects: projects.length,
         totalVerifications: experiences.length + education.length,
         githubRepos: githubRepos.length,
-        lastUpdated: experiences.length > 0 ? experiences[0].verifiedAt : user.createdAt
+        lastUpdated: experiences.length > 0 ? (experiences[0].verifiedAt || experiences[0].updatedAt || experiences[0].createdAt) : user.createdAt
       };
 
       res.json({
@@ -288,8 +332,8 @@
         userQuery.githubUsername = { $exists: true, $ne: '' };
       }
 
-      // Find users with verified experiences
-      const usersWithExperiences = await Experience.distinct('userId', { verified: true });
+  // Find users with any public experiences (verified or not)
+  const usersWithExperiences = await Experience.distinct('userId', { isPublic: true });
       userQuery._id = { $in: usersWithExperiences };
 
       const users = await User.find(userQuery)

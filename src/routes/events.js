@@ -516,10 +516,15 @@ router.post('/:eventId/push-experiences', requireAdminOrVerifier, async (req, re
         }
 
         // Create experience
+        // Use participant's institute from User DB as organization
+        const organization = participant.userId.institute || '';
+
         const experience = new Experience({
           userId: participant.userId._id,
           title: event.title,
           description: description,
+          organization,
+          // keep role if frontend uses it elsewhere (ignored by schema if strict)
           role: role,
           startDate: event.startDate,
           endDate: event.endDate || event.startDate,

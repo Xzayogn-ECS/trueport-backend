@@ -10,7 +10,12 @@ const educationSchema = new mongoose.Schema({
   courseType: {
     type: String,
     required: true,
-    enum: ['10TH', '12TH', 'DIPLOMA', 'BACHELORS', 'MASTERS', 'PHD', 'CERTIFICATE', 'OTHER'],
+    // courseType includes school-level entries (NUR, LKG, UKG, 1ST..12TH) and higher-education types
+      enum: [
+        'NUR', 'LKG', 'UKG',
+        '1ST', '2ND', '3RD', '4TH', '5TH', '6TH', '7TH', '8TH', '9TH', '10TH', '11TH', '12TH',
+        'DIPLOMA', 'BACHELORS', 'MASTERS', 'PHD', 'CERTIFICATE', 'OTHER'
+      ],
     trim: true
   },
   courseName: {
@@ -19,9 +24,9 @@ const educationSchema = new mongoose.Schema({
     trim: true,
     maxLength: 200
   },
+  // boardOrUniversity is optional for school-level entries (Nursery to 12th)
   boardOrUniversity: {
     type: String,
-    required: true,
     trim: true,
     maxLength: 200
   },
