@@ -57,23 +57,30 @@ router.post('/', requireAuth, async (req, res) => {
         return res.status(400).json({ message: 'Invites are not supported for GitHub projects' });
       }
 
-      // Check if a pending verification already exists for this item + verifier email
+      // Check if a pending verification already exists for this item (regardless of verifier email)
       const emailLower = email.trim().toLowerCase();
-      const existingVerification = await Verification.findOne({ itemId, itemType, verifierEmail: emailLower, status: 'PENDING', expiresAt: { $gt: new Date() } });
+      const existingVerification = await Verification.findOne({ itemId, itemType, status: 'PENDING', expiresAt: { $gt: new Date() } });
       if (existingVerification) {
-        verificationId = existingVerification._id;
+        // If a pending verification exists for this item, only allow reusing it when
+        // the pending verification targets the same verifier email. Prevent sending
+        // invites to other emails while a pending verification exists.
+        if (existingVerification.verifierEmail && existingVerification.verifierEmail.toLowerCase() === emailLower) {
+          verificationId = existingVerification._id;
+        } else {
+          return res.status(400).json({ message: 'A verification request is already pending for this item' });
+        }
       } else {
-        // create verification record
-        const token = generateVerificationToken();
-        const verification = new Verification({
+        // create verification record (use helper to avoid races)
+        const { createOrGetPendingVerification } = require('../utils/createVerification');
+        const { verification, created } = await createOrGetPendingVerification({
           itemId,
           itemType,
           verifierEmail: emailLower,
           verifierName: name?.trim() || '',
           verifierOrganization: organization?.trim() || '',
-          token
+          actorEmail: req.user.email,
+          metadata: { itemType }
         });
-        await verification.save();
         verificationId = verification._id;
       }
     }

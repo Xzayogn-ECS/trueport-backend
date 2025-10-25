@@ -86,6 +86,10 @@ const verificationSchema = new mongoose.Schema({
 // Indexes for better query performance
 verificationSchema.index({ token: 1 });
 verificationSchema.index({ itemId: 1, itemType: 1 });
+// Ensure at most one PENDING verification exists for the same item (atomic DB-level guarantee).
+// NOTE: Creating this unique partial index will fail if the database already contains
+// multiple PENDING verifications for the same item. Clean duplicates before applying in production.
+verificationSchema.index({ itemId: 1, itemType: 1 }, { unique: true, partialFilterExpression: { status: 'PENDING' } });
 verificationSchema.index({ experienceId: 1 }); // Keep for backward compatibility
 verificationSchema.index({ verifierEmail: 1 });
 verificationSchema.index({ status: 1 });

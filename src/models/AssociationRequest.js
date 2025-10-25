@@ -39,6 +39,12 @@ const associationRequestSchema = new mongoose.Schema({
     trim: true,
     maxLength: 200
   },
+  associationType: {
+    type: String,
+    enum: ['ACTIVE', 'ALUMNI'],
+    required: true,
+    default: 'ACTIVE'
+  },
   requestedRole: {
     type: String,
     enum: ['STUDENT', 'VERIFIER'],
@@ -83,7 +89,7 @@ associationRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Prevent duplicate pending requests for the same student and institute
 associationRequestSchema.index(
-  { studentId: 1, institute: 1, status: 1 },
+  { studentId: 1, institute: 1, associationType: 1, status: 1 },
   { 
     unique: true,
     partialFilterExpression: { status: 'PENDING' }

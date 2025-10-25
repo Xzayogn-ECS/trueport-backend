@@ -8,7 +8,7 @@ const router = express.Router();
 // Submit association request (Student requests to be associated with institute)
 router.post('/request', requireAuth, async (req, res) => {
   try {
-    const { requestedRole, institute, requestMessage } = req.body;
+    const { requestedRole, institute, requestMessage, associationType } = req.body;
     const student = req.user;
 
     // Validation
@@ -24,6 +24,12 @@ router.post('/request', requireAuth, async (req, res) => {
       });
     }
 
+    // associationType validation
+    const assocType = (associationType || 'ACTIVE').toUpperCase();
+    if (!['ACTIVE', 'ALUMNI'].includes(assocType)) {
+      return res.status(400).json({ message: 'associationType must be ACTIVE or ALUMNI' });
+    }
+
     if (institute.trim().length === 0) {
       return res.status(400).json({
         message: 'Institute name cannot be empty'
@@ -31,7 +37,8 @@ router.post('/request', requireAuth, async (req, res) => {
     }
 
     // Check if user's role is already set permanently
-    if (student.roleSetPermanently) {
+    // Allow ALUMNI association requests even if role was set permanently (they are informational/display only)
+    if (student.roleSetPermanently && assocType === 'ACTIVE') {
       return res.status(400).json({
         message: 'Your role has already been set and cannot be changed'
       });
@@ -49,10 +56,11 @@ router.post('/request', requireAuth, async (req, res) => {
       });
     }
 
-    // Check for existing pending request for this institute
+    // Check for existing pending request for this institute and association type
     const existingRequest = await AssociationRequest.findOne({
       studentId: student._id,
       institute: institute.trim(),
+      associationType: assocType,
       status: 'PENDING'
     });
 
@@ -71,6 +79,7 @@ router.post('/request', requireAuth, async (req, res) => {
       verifierEmail: null,
       verifierName: null,
       institute: institute.trim(),
+      associationType: assocType,
       requestedRole,
       requestMessage: requestMessage ? requestMessage.trim() : undefined
     });
@@ -78,9 +87,13 @@ router.post('/request', requireAuth, async (req, res) => {
     await associationRequest.save();
 
     // Update student's association status
-    await User.findByIdAndUpdate(student._id, {
-      associationStatus: 'PENDING'
-    });
+    // If the request is for ACTIVE association, mark user associationStatus as PENDING.
+    // If request is for ALUMNI and user already has an APPROVED ACTIVE association, do NOT change user's active association/status.
+    if (assocType === 'ACTIVE') {
+      await User.findByIdAndUpdate(student._id, {
+        associationStatus: 'PENDING'
+      });
+    }
 
     res.status(201).json({
       message: 'Association request submitted successfully',
@@ -88,6 +101,7 @@ router.post('/request', requireAuth, async (req, res) => {
         id: associationRequest._id,
         institute: institute.trim(),
         requestedRole,
+        associationType: assocType,
         status: 'PENDING',
         requestedAt: associationRequest.requestedAt,
         availableVerifiers: verifiersCount
@@ -130,7 +144,8 @@ router.get('/pending', requireAuth, async (req, res) => {
         email: request.studentEmail,
         profilePicture: request.studentId.profilePicture
       },
-      requestedRole: request.requestedRole,
+  requestedRole: request.requestedRole,
+  associationType: request.associationType || 'ACTIVE',
       institute: request.institute,
       requestMessage: request.requestMessage,
       status: request.status,
@@ -177,7 +192,8 @@ router.get('/my-requests', requireAuth, async (req, res) => {
         email: request.verifierEmail || 'N/A',
         institute: request.institute
       },
-      requestedRole: request.requestedRole,
+  requestedRole: request.requestedRole,
+  associationType: request.associationType || 'ACTIVE',
       institute: request.institute,
       status: request.status,
       requestMessage: request.requestMessage,
@@ -253,7 +269,8 @@ router.put('/:requestId/respond', requireAuth, async (req, res) => {
     }
 
     // Check if student's role is already set permanently
-    if (student.roleSetPermanently) {
+    // Only reject if the student already has a permanent role and the request is for ACTIVE association
+    if (student.roleSetPermanently && associationRequest.associationType === 'ACTIVE') {
       await AssociationRequest.findByIdAndUpdate(requestId, {
         status: 'REJECTED',
         verifierResponse: 'Student role already set permanently',
@@ -280,10 +297,35 @@ router.put('/:requestId/respond', requireAuth, async (req, res) => {
     });
 
     if (action === 'approve') {
-      // Update student's profile with approved association
+      // If this is an ALUMNI association, record it as an alumni association (display-only)
+      if (associationRequest.associationType === 'ALUMNI') {
+        // Push to user's alumniAssociations if not already present for same institute and role
+        await User.findByIdAndUpdate(student._id, {
+          $addToSet: {
+            alumniAssociations: {
+              institute: associationRequest.institute,
+              role: associationRequest.requestedRole,
+              approvedBy: verifier._id,
+              approvedAt: now
+            }
+          }
+        });
+
+        return res.json({
+          message: `Alumni association approved successfully`,
+          student: {
+            name: student.name,
+            email: student.email,
+            alumniInstitute: associationRequest.institute
+          }
+        });
+      }
+
+      // For ACTIVE association approvals, update student's primary profile as before
       await User.findByIdAndUpdate(student._id, {
         role: associationRequest.requestedRole,
         institute: associationRequest.institute,
+        associationType: associationRequest.associationType || 'ACTIVE',
         associationStatus: 'APPROVED',
         roleSetPermanently: true, // Role becomes permanent once approved
         roleSetAt: now,
@@ -348,7 +390,9 @@ router.delete('/:requestId', requireAuth, async (req, res) => {
       status: 'PENDING'
     });
 
-    if (otherPendingRequests === 0) {
+    // Only set associationStatus to NONE if there are no other pending requests AND the user does not have any approved ACTIVE association
+    const freshUser = await User.findById(student._id).select('associationStatus associationType');
+    if (otherPendingRequests === 0 && freshUser && freshUser.associationStatus !== 'APPROVED') {
       await User.findByIdAndUpdate(student._id, {
         associationStatus: 'NONE'
       });
@@ -397,7 +441,7 @@ router.get('/verifiers', requireAuth, async (req, res) => {
 
     const [verifiers, total] = await Promise.all([
       User.find(query)
-        .select('name email institute bio profilePicture createdAt')
+        .select('name email institute bio profilePicture createdAt associationType')
         .sort({ name: 1 })
         .skip(skip)
         .limit(parseInt(limit)),
@@ -414,7 +458,13 @@ router.get('/verifiers', requireAuth, async (req, res) => {
 
     const pendingVerifierIds = pendingRequests.map(req => req.verifierId.toString());
 
-    const formattedVerifiers = verifiers.map(verifier => ({
+    // Prefer ACTIVE associationType verifiers first, then ALUMNI, then others
+    const sortedVerifiers = verifiers.sort((a, b) => {
+      const score = (v) => (v.associationType === 'ACTIVE' ? 0 : (v.associationType === 'ALUMNI' ? 1 : 2));
+      return score(a) - score(b) || a.name.localeCompare(b.name);
+    });
+
+    const formattedVerifiers = sortedVerifiers.map(verifier => ({
       id: verifier._id,
       name: verifier.name,
       email: verifier.email,
@@ -422,6 +472,7 @@ router.get('/verifiers', requireAuth, async (req, res) => {
       bio: verifier.bio,
       profilePicture: verifier.profilePicture,
       joinedAt: verifier.createdAt,
+      associationType: verifier.associationType || 'ACTIVE',
       hasPendingRequest: pendingVerifierIds.includes(verifier._id.toString())
     }));
 

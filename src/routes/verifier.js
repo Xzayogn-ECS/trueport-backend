@@ -587,13 +587,17 @@ router.post('/reject/:requestId', requireAuth, requireVerifier, async (req, res)
   }
 });
 
-// Get students from same institution
+// Get students from same institution (supports filters by class, section, house)
 router.get('/institute-students', requireAuth, requireVerifier, async (req, res) => {
   try {
     const {
       search,
       page = 1,
-      limit = 12
+      limit = 12,
+      class: classQuery,
+      classLevel,
+      section,
+      house
     } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -611,6 +615,12 @@ router.get('/institute-students', requireAuth, requireVerifier, async (req, res)
       role: 'STUDENT'
     };
 
+    // support either `class` or `classLevel` query param
+    const classFilter = classQuery || classLevel;
+    if (classFilter) studentQuery.classLevel = classFilter;
+    if (section) studentQuery.section = section;
+    if (house) studentQuery.house = house;
+
     if (search) {
       studentQuery.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -620,7 +630,7 @@ router.get('/institute-students', requireAuth, requireVerifier, async (req, res)
     }
 
     const students = await User.find(studentQuery)
-      .select('name email institute profileJson createdAt')
+      .select('name email institute profileJson createdAt classLevel section house')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -649,6 +659,9 @@ router.get('/institute-students', requireAuth, requireVerifier, async (req, res)
           name: student.name,
           email: student.email,
           createdAt: student.createdAt,
+          classLevel: student.classLevel || null,
+          section: student.section || null,
+          house: student.house || null,
           stats: {
             experiences: totalExperiences,
             education: totalEducation,

@@ -1,7 +1,54 @@
 const express = require('express');
 const User = require('../models/User');
 const { requireAuth } = require('../middlewares/auth');
+const { verifyToken } = require('../utils/jwt');
+const InstituteAdmin = require('../models/InstituteAdmin');
+const ProfileUpdateRequest = require('../models/ProfileUpdateRequest');
 
+const requireAdminOrVerifier = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) { 
+      return res.status(401).json({ message: 'Access denied. No token provided.' });
+    }
+
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if it's an admin token
+    if (decoded.adminType === 'INSTITUTE_ADMIN') {
+      const InstituteAdmin = require('../models/InstituteAdmin');
+      const admin = await InstituteAdmin.findById(decoded.adminId);
+      
+      if (!admin || !admin.isActive) {
+        return res.status(401).json({ message: 'Invalid token or inactive account.' });
+      }
+      
+      req.admin = admin;
+      req.userType = 'INSTITUTE_ADMIN';
+      return next();
+    }
+    
+    // Check if it's a verifier (user) token
+    const user = await User.findById(decoded.userId);
+    
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid token.' });
+    }
+    
+    if (user.role !== 'VERIFIER') {
+      return res.status(403).json({ message: 'Access denied. Admin or Verifier role required.' });
+    }
+    
+    req.user = user;
+    req.userType = 'VERIFIER';
+    next();
+  } catch (error) {
+    console.error('Auth error:', error);
+    res.status(401).json({ message: 'Authentication error.' });
+  }
+};
 const router = express.Router();
 
 // Get current user profile
@@ -118,6 +165,181 @@ router.put('/me/contact-info', requireAuth, async (req, res) => {
       message: 'Failed to update contact information',
       error: error.message
     });
+  }
+});
+
+/**
+ * Admin/Verifier: Directly update a user's student profile fields (dob, classLevel, section, house)
+ * Endpoint: PUT /api/users/:userId/profile
+ * Permissions: Institute Admin or Verifier (must be same institution)
+ */
+  router.put('/:userId/profile', requireAdminOrVerifier, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { dob, classLevel, section, house } = req.body;
+
+      const target = await User.findById(userId);
+      if (!target) return res.status(404).json({ message: 'User not found' });
+
+      // Ensure same institution
+      const institution = req.userType === 'INSTITUTE_ADMIN' ? req.admin.institution : req.user.institute;
+      if (target.institute !== institution) return res.status(403).json({ message: 'Target user must belong to your institution' });
+
+      const updates = {};
+      if (dob !== undefined) updates.dob = dob ? new Date(dob) : null;
+      if (classLevel !== undefined) updates.classLevel = classLevel;
+      if (section !== undefined) updates.section = section;
+      if (house !== undefined) updates.house = house;
+
+      if (Object.keys(updates).length === 0) return res.status(400).json({ message: 'At least one field must be provided' });
+
+      const updated = await User.findByIdAndUpdate(userId, { $set: updates }, { new: true, runValidators: true }).select('dob classLevel section house');
+
+      res.json({ message: 'Profile updated', profile: updated });
+    } catch (error) {
+      console.error('Direct profile update error:', error);
+      res.status(500).json({ message: 'Failed to update profile', error: error.message });
+    }
+  });
+
+/**
+ * Student: Request profile update (creates a ProfileUpdateRequest)
+ * Endpoint: POST /api/users/me/profile-request
+ */
+router.post('/me/profile-request', requireAuth, async (req, res) => {
+  try {
+    const { dob, classLevel, section, house } = req.body;
+    const changes = {};
+    if (dob !== undefined) changes.dob = dob ? new Date(dob) : null;
+    if (classLevel !== undefined) changes.classLevel = classLevel;
+    if (section !== undefined) changes.section = section;
+    if (house !== undefined) changes.house = house;
+
+    if (Object.keys(changes).length === 0) return res.status(400).json({ message: 'At least one change is required' });
+
+    const reqDoc = new ProfileUpdateRequest({
+      userId: req.user._id,
+      requestedBy: req.user._id,
+      changes
+    });
+
+    await reqDoc.save();
+
+    res.status(201).json({ message: 'Profile update request created', request: reqDoc });
+  } catch (error) {
+    console.error('Create profile request error:', error);
+    res.status(500).json({ message: 'Failed to create request', error: error.message });
+  }
+});
+
+/**
+ * Admin/Verifier: View a user's student profile fields (dob, classLevel, section, house)
+ * Endpoint: GET /api/users/:userId/profile
+ * Permissions: Institute Admin or Verifier (must be same institution)
+ */
+router.get('/:userId/profile', requireAdminOrVerifier, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const target = await User.findById(userId).select('name email dob classLevel section house institute');
+    if (!target) return res.status(404).json({ message: 'User not found' });
+
+    // Ensure same institution
+    const institution = req.userType === 'INSTITUTE_ADMIN' ? req.admin.institution : req.user.institute;
+    if (target.institute !== institution) return res.status(403).json({ message: 'Target user must belong to your institution' });
+
+    res.json({ profile: {
+      id: target._id,
+      name: target.name,
+      email: target.email,
+      dob: target.dob || null,
+      classLevel: target.classLevel || null,
+      section: target.section || null,
+      house: target.house || null
+    }});
+  } catch (error) {
+    console.error('Get user profile error:', error);
+    res.status(500).json({ message: 'Failed to fetch profile', error: error.message });
+  }
+});
+
+/**
+ * Admin/Verifier: List pending profile update requests for their institution
+ * Endpoint: GET /api/users/profile-requests
+ */
+router.get('/profile-requests', requireAdminOrVerifier, async (req, res) => {
+  try {
+    // For institute admins/verifiers, fetch requests for users in their institution
+    const institution = req.userType === 'INSTITUTE_ADMIN' ? req.admin.institution : req.user.institute;
+    console.log('Institution:', institution);
+    // Find users belonging to the institution, then their pending requests
+    const users = await User.find({ institute: institution }).select('_id');
+    console.log('Users in institution:', users);
+    const userIds = users.map(u => u._id);
+
+    const requests = await ProfileUpdateRequest.find({ userId: { $in: userIds }, status: 'PENDING' })
+      .populate('userId', 'name email institute')
+      .populate('requestedBy', 'name email')
+      .sort({ createdAt: -1 })
+      .exec();
+
+    res.json({ requests });
+  } catch (error) {
+    console.error('List profile requests error:', error);
+    res.status(500).json({ message: 'Failed to list requests', error: error.message });
+  }
+});
+
+/**
+ * Admin/Verifier: Approve or reject a profile update request
+ * Endpoint: POST /api/users/profile-requests/:requestId/decide
+ * Body: { action: 'APPROVE'|'REJECT', comment?: string }
+ */
+router.post('/profile-requests/:requestId/decide', requireAdminOrVerifier, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { action, comment } = req.body;
+
+    const reqDoc = await ProfileUpdateRequest.findById(requestId).populate('userId', 'institute');
+    if (!reqDoc) return res.status(404).json({ message: 'Request not found' });
+
+    const institution = req.userType === 'INSTITUTE_ADMIN' ? req.admin.institution : req.user.institute;
+    if (reqDoc.userId.institute !== institution) return res.status(403).json({ message: 'Access denied to this request' });
+
+    if (!['APPROVE', 'REJECT'].includes(action)) return res.status(400).json({ message: 'Invalid action' });
+
+    if (reqDoc.status !== 'PENDING') return res.status(400).json({ message: 'Request already processed' });
+
+    if (action === 'APPROVE') {
+      // Apply changes to user's profile
+      const changes = reqDoc.changes || {};
+      const updates = {};
+      if (changes.dob !== undefined) updates.dob = changes.dob;
+      if (changes.classLevel !== undefined) updates.classLevel = changes.classLevel;
+      if (changes.section !== undefined) updates.section = changes.section;
+      if (changes.house !== undefined) updates.house = changes.house;
+
+      await User.findByIdAndUpdate(reqDoc.userId._id, { $set: updates }, { new: true, runValidators: true });
+
+      reqDoc.status = 'APPROVED';
+      reqDoc.decisionComment = comment || '';
+      reqDoc.decidedBy = req.userType === 'INSTITUTE_ADMIN' ? req.admin._id : req.user._id;
+      reqDoc.decidedAt = new Date();
+      await reqDoc.save();
+
+      return res.json({ message: 'Request approved and applied' });
+    }
+
+    // REJECT
+    reqDoc.status = 'REJECTED';
+    reqDoc.decisionComment = comment || '';
+    reqDoc.decidedBy = req.userType === 'INSTITUTE_ADMIN' ? req.admin._id : req.user._id;
+    reqDoc.decidedAt = new Date();
+    await reqDoc.save();
+
+    res.json({ message: 'Request rejected' });
+  } catch (error) {
+    console.error('Decide profile request error:', error);
+    res.status(500).json({ message: 'Failed to process request', error: error.message });
   }
 });
 
@@ -695,15 +917,56 @@ router.put('/me/password', requireAuth, async (req, res) => {
   }
 });
 
-// Get verifiers from same institution (for verification requests)
-router.get('/institute-verifiers', requireAuth, async (req, res) => {
+// Middleware: allow either authenticated user OR institute admin
+const requireUserOrInstituteAdmin = async (req, res, next) => {
   try {
-    const userInstitute = req.user.institute;
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+
+    // If admin token for institute admin
+    if (decoded.adminType === 'INSTITUTE_ADMIN') {
+      const admin = await InstituteAdmin.findById(decoded.adminId).populate('institution');
+      if (!admin) return res.status(401).json({ message: 'Invalid admin token' });
+      req.admin = admin;
+      req.adminType = 'INSTITUTE_ADMIN';
+      return next();
+    }
+
+    // Otherwise treat as regular user token
+    const User = require('../models/User');
+    const user = await User.findById(decoded.userId).select('-passwordHash');
+    if (!user) return res.status(401).json({ message: 'Invalid user token' });
+    req.user = user;
+    return next();
+  } catch (error) {
+    console.error('Auth error for institute-verifiers:', error);
+    if (error.name === 'JsonWebTokenError') return res.status(401).json({ message: 'Invalid token' });
+    if (error.name === 'TokenExpiredError') return res.status(401).json({ message: 'Token expired' });
+    return res.status(500).json({ message: 'Authentication error' });
+  }
+};
+
+// Get verifiers from same institution (for verification requests)
+router.get('/institute-verifiers', requireUserOrInstituteAdmin, async (req, res) => {
+  try {
     const { search, department, page = 1, limit = 20 } = req.query;
+
+    // Derive institute from admin or user
+    let userInstitute = null;
+    if (req.admin && req.adminType === 'INSTITUTE_ADMIN') {
+      userInstitute = req.admin.institution;
+    } else if (req.user) {
+      userInstitute = req.user.institute;
+    }
 
     if (!userInstitute) {
       return res.status(400).json({
-        message: 'User must have an institute associated to find verifiers'
+        message: 'Caller must be associated with an institute to find verifiers'
       });
     }
 

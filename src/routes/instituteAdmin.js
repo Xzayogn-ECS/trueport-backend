@@ -181,7 +181,7 @@ router.get('/institution', requireInstituteAdmin, async (req, res) => {
 // Get Institute Users
 router.get('/users', requireInstituteAdmin, requirePermission('manageUsers'), async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, role, associationStatus } = req.query;
+    const { page = 1, limit = 10, search, role, associationStatus, class: classQuery, classLevel, section, house } = req.query;
     
     let query = { institute: req.admin.institution };
     
@@ -200,6 +200,11 @@ router.get('/users', requireInstituteAdmin, requirePermission('manageUsers'), as
     if (associationStatus) {
       query.associationStatus = associationStatus;
     }
+
+    const classFilter = classQuery || classLevel;
+    if (classFilter) query.classLevel = classFilter;
+    if (section) query.section = section;
+    if (house) query.house = house;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
@@ -1101,6 +1106,7 @@ router.put('/association-requests/:requestId/respond', requireInstituteAdmin, re
       await User.findByIdAndUpdate(student._id, {
         role: associationRequest.requestedRole,
         institute: associationRequest.institute,
+        associationType: associationRequest.associationType || 'ACTIVE',
         associationStatus: 'APPROVED',
         roleSetPermanently: true,
         roleSetAt: now,

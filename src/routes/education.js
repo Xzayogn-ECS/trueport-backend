@@ -66,48 +66,29 @@ router.post('/', requireAuth, async (req, res) => {
     try {
       const { requestVerification, verifierEmail } = req.body;
       if ((requestVerification || verifierEmail) && !education.verified) {
-        // Require a verifier email to create a verification request
         const verifierEmailLower = (verifierEmail || '').toLowerCase();
-        if (!verifierEmailLower) {
-          // don't block creation, just skip verification creation
-        } else {
-          // Find verifier user and ensure role
+        if (verifierEmailLower) {
           const verifier = await User.findOne({ email: verifierEmailLower, role: 'VERIFIER' });
           if (verifier) {
             const student = await User.findById(req.user._id).select('institute name email');
             if (student && student.institute && verifier.institute && student.institute === verifier.institute) {
-              // Check for existing pending verification
-              const existing = await Verification.findOne({
+              const { createOrGetPendingVerification } = require('../utils/createVerification');
+              const { verification, created } = await createOrGetPendingVerification({
                 itemId: education._id,
                 itemType: 'EDUCATION',
-                status: 'PENDING',
-                expiresAt: { $gt: new Date() }
+                verifierEmail: verifier.email,
+                verifierName: verifier.name,
+                verifierOrganization: verifier.institute || '',
+                actorEmail: req.user.email,
+                metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EDUCATION' }
               });
 
-              if (!existing) {
-                const token = generateVerificationToken();
-                const verification = new Verification({
-                  itemId: education._id,
-                  itemType: 'EDUCATION',
-                  verifierEmail: verifier.email.toLowerCase(),
-                  token
-                });
-                await verification.save();
-
-                await new VerificationLog({
-                  verificationId: verification._id,
-                  action: 'CREATED',
-                  actorEmail: req.user.email,
-                  metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EDUCATION' }
-                }).save();
-
-                // Send email (best-effort)
+              if (created) {
                 try {
-                  await sendVerificationEmail(verifier.email, token, education.courseName || 'Education', student.name, 'EDUCATION');
+                  await sendVerificationEmail(verifier.email, verification.token, education.courseName || 'Education', student.name, 'EDUCATION');
                 } catch (e) {
                   console.warn('Failed to send verification email for education:', e.message || e);
                 }
-
                 createdVerification = verification;
               }
             }
@@ -346,35 +327,23 @@ router.put('/:id', requireAuth, async (req, res) => {
           const verifier = await User.findOne({ email: verifierEmailLower, role: 'VERIFIER' });
           const student = await User.findById(req.user._id).select('institute name email');
           if (verifier && student && student.institute && verifier.institute && student.institute === verifier.institute) {
-            const existing = await Verification.findOne({
+            const { createOrGetPendingVerification } = require('../utils/createVerification');
+            const { verification, created } = await createOrGetPendingVerification({
               itemId: updatedEducation._id,
               itemType: 'EDUCATION',
-              status: 'PENDING',
-              expiresAt: { $gt: new Date() }
+              verifierEmail: verifier.email,
+              verifierName: verifier.name,
+              verifierOrganization: verifier.institute || '',
+              actorEmail: req.user.email,
+              metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EDUCATION' }
             });
-            if (!existing) {
-              const token = generateVerificationToken();
-              const verification = new Verification({
-                itemId: updatedEducation._id,
-                itemType: 'EDUCATION',
-                verifierEmail: verifier.email.toLowerCase(),
-                token
-              });
-              await verification.save();
 
-              await new VerificationLog({
-                verificationId: verification._id,
-                action: 'CREATED',
-                actorEmail: req.user.email,
-                metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EDUCATION' }
-              }).save();
-
+            if (created) {
               try {
-                await sendVerificationEmail(verifier.email, token, updatedEducation.courseName || 'Education', student.name, 'EDUCATION');
+                await sendVerificationEmail(verifier.email, verification.token, updatedEducation.courseName || 'Education', student.name, 'EDUCATION');
               } catch (e) {
                 console.warn('Failed to send verification email for education:', e.message || e);
               }
-
               createdVerification = verification;
             }
           }

@@ -60,6 +60,11 @@ const userSchema = new mongoose.Schema({
     enum: ['NONE', 'PENDING', 'APPROVED', 'REJECTED'],
     default: 'NONE'
   },
+  associationType: {
+    type: String,
+    enum: ['ACTIVE', 'ALUMNI'],
+    default: 'ACTIVE'
+  },
   approvedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -158,6 +163,25 @@ const userSchema = new mongoose.Schema({
     maxLength: 200,
     index: true
   },
+  // Optional student fields for easier participant search and school-level data
+  dob: {
+    type: Date
+  },
+  classLevel: {
+    type: String,
+    trim: true,
+    maxLength: 20 // e.g., '10', '11', 'Nursery', 'KG', etc.
+  },
+  section: {
+    type: String,
+    trim: true,
+    maxLength: 10
+  },
+  house: {
+    type: String,
+    trim: true,
+    maxLength: 50
+  },
   profileJson: {
     type: mongoose.Schema.Types.Mixed,
     default: {}
@@ -182,6 +206,14 @@ const userSchema = new mongoose.Schema({
   createdInstitutions: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution'
+  }],
+
+  // Approved alumni associations (display-only records)
+  alumniAssociations: [{
+    institute: { type: String, trim: true, maxLength: 200 },
+    role: { type: String, enum: ['STUDENT', 'VERIFIER'] },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    approvedAt: { type: Date }
   }],
   
   createdAt: {

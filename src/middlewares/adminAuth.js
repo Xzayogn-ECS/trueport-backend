@@ -155,10 +155,57 @@ const requirePermission = (permission) => {
   };
 };
 
+const requireAdminOrVerifier = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ message: 'Access denied. No token provided.' });
+    }
+
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if it's an admin token
+    if (decoded.adminType === 'INSTITUTE_ADMIN') {
+      const InstituteAdmin = require('../models/InstituteAdmin');
+      const admin = await InstituteAdmin.findById(decoded.adminId);
+      
+      if (!admin || !admin.isActive) {
+        return res.status(401).json({ message: 'Invalid token or inactive account.' });
+      }
+      
+      req.admin = admin;
+      req.userType = 'INSTITUTE_ADMIN';
+      return next();
+    }
+    
+    // Check if it's a verifier (user) token
+    const user = await User.findById(decoded.userId);
+    
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid token.' });
+    }
+    
+    if (user.role !== 'VERIFIER') {
+      return res.status(403).json({ message: 'Access denied. Admin or Verifier role required.' });
+    }
+    
+    req.user = user;
+    req.userType = 'VERIFIER';
+    next();
+  } catch (error) {
+    console.error('Auth error:', error);
+    res.status(401).json({ message: 'Authentication error.' });
+  }
+};
+
+
 module.exports = {
   generateAdminToken,
   requireSuperAdmin,
   requireInstituteAdmin,
   requireAnyAdmin,
-  requirePermission
+  requirePermission,
+  requireAdminOrVerifier
 };

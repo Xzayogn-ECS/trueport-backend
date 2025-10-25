@@ -138,7 +138,60 @@ const eventSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Experience'
     },
+    // Award/Position assigned by judges or coordinators
+    award: {
+      rank: {
+        type: Number,
+        min: 1
+      },
+      label: {
+        type: String,
+        trim: true,
+        maxLength: 100 // e.g., "Best Speaker", "Best Project", "Best Teamwork"
+      },
+      assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      assignedAt: {
+        type: Date
+      }
+    },
     addedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  // Assigned users for event operations
+  coordinators: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      // optional: assigned coordinators may be added later
+    },
+    assignedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  inCharges: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      // optional: assigned in-charges may be added later
+    },
+    assignedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  judges: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      // optional: assigned judges may be added later
+    },
+    assignedAt: {
       type: Date,
       default: Date.now
     }
@@ -230,6 +283,21 @@ eventSchema.methods.isParticipant = function(userId) {
   return this.participants.some(
     p => p.userId.toString() === userId.toString()
   );
+};
+
+// Method to check if user is a coordinator
+eventSchema.methods.isCoordinator = function(userId) {
+  return this.coordinators.some(c => c.userId.toString() === userId.toString());
+};
+
+// Method to check if user is an in-charge
+eventSchema.methods.isInCharge = function(userId) {
+  return this.inCharges.some(c => c.userId.toString() === userId.toString());
+};
+
+// Method to check if user is a judge
+eventSchema.methods.isJudge = function(userId) {
+  return this.judges.some(j => j.userId.toString() === userId.toString());
 };
 
 module.exports = mongoose.model('Event', eventSchema);

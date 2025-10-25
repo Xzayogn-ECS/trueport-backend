@@ -37,43 +37,26 @@ router.post('/request/:experienceId', requireAuth, async (req, res) => {
       });
     }
 
-    // Check for existing pending verification
-    const existingVerification = await Verification.findOne({
-      experienceId: req.params.experienceId,
-      status: 'PENDING',
-      expiresAt: { $gt: new Date() }
-    });
-
-    if (existingVerification) {
-      return res.status(400).json({ 
-        message: 'Verification request already pending for this experience' 
-      });
-    }
-
-    // Generate verification token
-    const token = generateVerificationToken();
-
-    // Create verification record
-    const verification = new Verification({
-      experienceId: req.params.experienceId,
-      verifierEmail: verifierEmail.toLowerCase(),
-      token
-    });
-
-    await verification.save();
-
-    // Log the verification request
-    await new VerificationLog({
-      verificationId: verification._id,
-      action: 'CREATED',
+    // Create or get existing pending verification atomically
+    const { createOrGetPendingVerification } = require('../utils/createVerification');
+    const { verification, created } = await createOrGetPendingVerification({
+      itemId: req.params.experienceId,
+      itemType: 'EXPERIENCE',
+      verifierEmail: verifierEmail,
+      verifierName: '',
+      verifierOrganization: '',
       actorEmail: req.user.email,
       metadata: { verifierEmail }
-    }).save();
+    });
+
+    if (!created) {
+      return res.status(400).json({ message: 'Verification request already pending for this experience' });
+    }
 
     // Send verification email
     const emailSent = await sendVerificationEmail(
       verifierEmail,
-      token,
+      verification.token,
       experience.title,
       experience.userId.name
     );

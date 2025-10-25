@@ -59,38 +59,28 @@ router.post('/', requireAuth, async (req, res) => {
           if (verifier) {
             const student = await User.findById(req.user._id).select('institute name email');
             if (student && student.institute && verifier.institute && student.institute === verifier.institute) {
-              // Check for existing pending verification
-              const existing = await Verification.findOne({
+              const { createOrGetPendingVerification } = require('../utils/createVerification');
+
+              const { verification, created } = await createOrGetPendingVerification({
                 itemId: experience._id,
                 itemType: 'EXPERIENCE',
-                status: 'PENDING',
-                expiresAt: { $gt: new Date() }
+                verifierEmail: verifier.email,
+                verifierName: verifier.name,
+                verifierOrganization: verifier.institute || '',
+                actorEmail: req.user.email,
+                metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EXPERIENCE' }
               });
 
-              if (!existing) {
-                const token = generateVerificationToken();
-                const verification = new Verification({
-                  itemId: experience._id,
-                  itemType: 'EXPERIENCE',
-                  verifierEmail: verifier.email.toLowerCase(),
-                  token
-                });
-                await verification.save();
-
-                await new VerificationLog({
-                  verificationId: verification._id,
-                  action: 'CREATED',
-                  actorEmail: req.user.email,
-                  metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EXPERIENCE' }
-                }).save();
-
+              if (created) {
                 try {
-                  await sendVerificationEmail(verifier.email, token, experience.title || 'Experience', student.name, 'EXPERIENCE');
+                  await sendVerificationEmail(verifier.email, verification.token, experience.title || 'Experience', student.name, 'EXPERIENCE');
                 } catch (e) {
                   console.warn('Failed to send verification email for experience:', e.message || e);
                 }
-
                 createdVerification = verification;
+              } else {
+                // reuse existing pending verification
+                createdVerification = null;
               }
             }
           }
@@ -334,35 +324,24 @@ router.put('/:id', requireAuth, async (req, res) => {
           const verifier = await User.findOne({ email: verifierEmailLower, role: 'VERIFIER' });
           const student = await User.findById(req.user._id).select('institute name email');
           if (verifier && student && student.institute && verifier.institute && student.institute === verifier.institute) {
-            const existing = await Verification.findOne({
+            const { createOrGetPendingVerification } = require('../utils/createVerification');
+
+            const { verification, created } = await createOrGetPendingVerification({
               itemId: updatedExperience._id,
               itemType: 'EXPERIENCE',
-              status: 'PENDING',
-              expiresAt: { $gt: new Date() }
+              verifierEmail: verifier.email,
+              verifierName: verifier.name,
+              verifierOrganization: verifier.institute || '',
+              actorEmail: req.user.email,
+              metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EXPERIENCE' }
             });
-            if (!existing) {
-              const token = generateVerificationToken();
-              const verification = new Verification({
-                itemId: updatedExperience._id,
-                itemType: 'EXPERIENCE',
-                verifierEmail: verifier.email.toLowerCase(),
-                token
-              });
-              await verification.save();
 
-              await new VerificationLog({
-                verificationId: verification._id,
-                action: 'CREATED',
-                actorEmail: req.user.email,
-                metadata: { verifierEmail: verifier.email, verifierName: verifier.name, itemType: 'EXPERIENCE' }
-              }).save();
-
+            if (created) {
               try {
-                await sendVerificationEmail(verifier.email, token, updatedExperience.title || 'Experience', student.name, 'EXPERIENCE');
+                await sendVerificationEmail(verifier.email, verification.token, updatedExperience.title || 'Experience', student.name, 'EXPERIENCE');
               } catch (e) {
                 console.warn('Failed to send verification email for experience:', e.message || e);
               }
-
               createdVerification = verification;
             }
           }
