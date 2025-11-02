@@ -3,6 +3,7 @@ const passport = require('../config/passport');
 const crypto = require('crypto');
 const User = require('../models/User');
 const { generateToken } = require('../utils/jwt');
+const { requireAuth } = require('../middlewares/auth');
 
 const router = express.Router(); 
 
@@ -302,4 +303,171 @@ router.post('/validate', async (req, res) => {
     });
   }
 });
+
+// Magic Link: Validate token and show set-password page
+// Endpoint: GET /auth/magic-link/:token
+// NOTE: This endpoint only validates the token (does NOT consume it).
+// The frontend should then present a "Set password" form that POSTs to
+// POST /auth/magic-link/set-password with { token, password } to consume the token
+router.get('/magic-link/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { redirect } = req.query; // optional redirect URL
+
+    if (!token) {
+      return res.status(400).json({
+        message: 'Magic link token is required'
+      });
+    }
+
+    const MagicLinkToken = require('../models/MagicLinkToken');
+
+    // Find token but do NOT mark it used yet; this allows the frontend to show a set-password form
+    const magicLink = await MagicLinkToken.findOne({ token, used: false, expiresAt: { $gt: new Date() } });
+
+    if (!magicLink) {
+      return res.status(400).json({
+        message: 'Invalid or expired magic link. Please request a new one.'
+      });
+    }
+
+    // Ensure user exists
+    const user = await User.findOne({ email: magicLink.email }).select('-passwordHash');
+    if (!user) {
+      console.warn('User not found for magic link email:', magicLink.email);
+      return res.status(404).json({ message: 'User account not found. Please contact the verifier.' });
+    }
+
+    // Return minimal info to the frontend so it can show an email/username and prompt for password
+    res.json({
+      valid: true,
+      email: magicLink.email,
+      user: user.toJSON(),
+      redirect: redirect || `/bg-chat/${magicLink.context && magicLink.context.chatId ? magicLink.context.chatId : ''}`
+    });
+  } catch (error) {
+    console.error('Magic link validation error:', error);
+    res.status(500).json({ message: 'Failed to validate magic link', error: error.message });
+  }
+});
+
+// Consume magic link and set password
+// Endpoint: POST /auth/magic-link/set-password
+// Body: { token, password }
+router.post('/magic-link/set-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ message: 'Token and password are required' });
+    }
+
+    // Basic password strength check
+    const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/?]).{8,}$/;
+    if (!strongPasswordRegex.test(password)) {
+      return res.status(400).json({
+        message: 'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character'
+      });
+    }
+
+    const MagicLinkToken = require('../models/MagicLinkToken');
+
+    // Verify and mark token as used (atomic)
+    const magicLink = await MagicLinkToken.verifyAndUseToken(token);
+    if (!magicLink) {
+      return res.status(400).json({ message: 'Invalid or expired magic link. Please request a new one.' });
+    }
+
+    // Find user
+    const user = await User.findOne({ email: magicLink.email });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found for this magic link' });
+    }
+
+    // Set password (will be hashed by pre-save hook)
+    user.passwordHash = password;
+    // Mark email verified since they used the magic link
+    user.emailVerified = true;
+    await user.save();
+
+    // Generate JWT and set cookie so the user is logged in immediately
+    const jwtToken = generateToken({ userId: user._id, email: user.email, role: user.role });
+    res.cookie('auth_token', jwtToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    return res.json({ message: 'Password set successfully', token: jwtToken, user: user.toJSON(), redirect: (magicLink.context && magicLink.context.chatId) ? `/bg-chat/${magicLink.context.chatId}` : '/dashboard' });
+  } catch (error) {
+    console.error('Set password via magic link error:', error);
+    return res.status(500).json({ message: 'Failed to set password', error: error.message });
+  }
+});
+
 module.exports = router;
+
+// Create or complete account for magic-link / placeholder users
+// Protected: requires valid JWT (issued by magic link)
+router.post('/create-account', requireAuth, async (req, res) => {
+  try {
+    const userFromToken = req.user; // populated by requireAuth middleware
+    const { name, institutionName, password } = req.body;
+
+    if (!name || !password) {
+      return res.status(400).json({ message: 'Name and password are required' });
+    }
+
+    // Password strength check (reuse same policy as registration)
+    const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/?]).{8,}$/;
+    if (!strongPasswordRegex.test(password)) {
+      return res.status(400).json({
+        message:
+          'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character'
+      });
+    }
+
+    // Load the full user record (include passwordHash for update)
+    const user = await User.findById(userFromToken._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Ensure email consistency - do not allow changing email here
+    // The frontend should not send email; use the authenticated user's email
+    // Update basic profile fields and set role to VERIFIER
+    user.name = name.trim();
+    if (institutionName) user.institute = institutionName.trim();
+    user.passwordHash = password; // will be hashed by pre-save hook
+    user.role = 'VERIFIER';
+    user.profileSetupComplete = true;
+
+    // If this was an external placeholder, mark emailVerified false (or true?)
+    // We'll keep emailVerified false but the account is usable.
+
+    await user.save();
+
+    // Issue a fresh JWT so the client can use it
+    const jwtToken = generateToken({ userId: user._id, email: user.email, role: user.role });
+
+    // Set HttpOnly cookie for convenience
+    res.cookie('auth_token', jwtToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    return res.json({
+      message: 'Account created/updated successfully',
+      token: jwtToken,
+      user: user.toJSON()
+    });
+  } catch (error) {
+    console.error('Create account error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Account with this email already exists' });
+    }
+    return res.status(500).json({ message: 'Failed to create or update account', error: error.message });
+  }
+});
+
+

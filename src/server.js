@@ -31,6 +31,9 @@ const instituteAdminRoutes = require('./routes/instituteAdmin');
 // Event routes
 const eventRoutes = require('./routes/events');
 
+// Background verification routes
+const backgroundVerificationRoutes = require('./routes/backgroundVerification');
+
 const app = express();
 
 // Connect to MongoDB
@@ -101,6 +104,9 @@ app.use('/api/institute-admin', instituteAdminRoutes);
 // Event routes
 app.use('/api/events', eventRoutes);
 
+// Background verification routes
+app.use('/api/background-verification', backgroundVerificationRoutes);
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
@@ -123,7 +129,56 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+// Start HTTP server and initialize Socket.IO
+const http = require('http');
+const server = http.createServer(app);
+const { Server } = require('socket.io');
+
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+// Simple socket handlers: clients should join rooms 'bg-chat:<chatId>' and 'user:<userId>'
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+
+  socket.on('join', async ({ room, chatId, userId }) => {
+    try {
+      if (room) {
+        socket.join(room);
+        socket.emit('joined', { room });
+      }
+      if (chatId) {
+        const r = `bg-chat:${chatId}`;
+        socket.join(r);
+        socket.emit('joined', { room: r });
+      }
+      if (userId) {
+        const ur = `user:${userId}`;
+        socket.join(ur);
+        socket.emit('joined', { room: ur });
+      }
+    } catch (err) {
+      console.warn('Socket join error:', err.message || err);
+    }
+  });
+
+  socket.on('leave', ({ room }) => {
+    if (room) socket.leave(room);
+  });
+
+  socket.on('disconnect', () => {
+    // console.log('Socket disconnected:', socket.id);
+  });
+});
+
+// Expose io to routes via app.locals
+app.locals.io = io;
+
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
 });

@@ -215,6 +215,11 @@ const userSchema = new mongoose.Schema({
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     approvedAt: { type: Date }
   }],
+  // External contacts created as placeholders when students share referees
+  externalContact: {
+    type: Boolean,
+    default: false
+  },
   
   createdAt: {
     type: Date,
