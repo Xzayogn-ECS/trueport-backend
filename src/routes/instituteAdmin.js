@@ -717,13 +717,81 @@ router.post('/users/bulk-action', requireInstituteAdmin, requirePermission('mana
 });
 
 // Import Users from CSV/Excel (Bulk Create)
+// Accepts either:
+// 1. Body: { users: [...] } - Array of user objects
+// 2. Body: { csvUrl: "https://..." } - URL to CSV file to fetch and parse
 router.post('/users/bulk-import', requireInstituteAdmin, requirePermission('manageUsers'), async (req, res) => {
   try {
-    const { users } = req.body; // Array of user objects
+    const { users: bodyUsers, csvUrl } = req.body;
+    let users = bodyUsers;
+
+    // If csvUrl provided, fetch and parse the CSV
+    if (csvUrl && !users) {
+      try {
+        const https = require('https');
+        const http = require('http');
+
+        // Fetch CSV from URL
+        const csvData = await new Promise((resolve, reject) => {
+          const client = csvUrl.startsWith('https') ? https : http;
+          client.get(csvUrl, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(data));
+          }).on('error', reject);
+        });
+
+        // Parse CSV
+        const lines = csvData.trim().split('\n');
+        if (lines.length < 2) {
+          return res.status(400).json({ message: 'CSV is empty or has no data rows' });
+        }
+
+        // Extract headers from first line
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const headerMap = {};
+        headers.forEach((header, idx) => {
+          headerMap[header.toLowerCase()] = idx;
+        });
+        
+        // Parse data rows
+        users = [];
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue; // Skip empty lines
+
+          // Simple CSV parsing (handles basic cases; for complex quoted fields, use a library)
+          const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          const user = {};
+          
+          headers.forEach((header, idx) => {
+            if (idx < values.length) {
+              user[header.toLowerCase()] = values[idx];
+            }
+          });
+
+          if (user.email && user.name && user.role) {
+            users.push(user);
+          }
+        }
+
+        if (users.length === 0) {
+          return res.status(400).json({ message: 'No valid users found in CSV' });
+        }
+
+        console.log(`✅ Parsed ${users.length} users from CSV URL`);
+      } catch (csvError) {
+        console.error('Failed to fetch/parse CSV from URL:', csvError);
+        return res.status(400).json({
+          message: 'Failed to fetch or parse CSV from URL',
+          error: csvError.message
+        });
+      }
+    }
 
     if (!users || !Array.isArray(users) || users.length === 0) {
       return res.status(400).json({
-        message: 'Users array is required and cannot be empty'
+        message: 'Users array is required and cannot be empty (provide either users array or csvUrl)'
       });
     }
 
@@ -749,7 +817,7 @@ router.post('/users/bulk-import', requireInstituteAdmin, requirePermission('mana
 
     for (const userData of users) {
       try {
-        const { name, email, role, bio, githubUsername } = userData;
+        const { name, email, role, bio, githubusername, associationtype } = userData;
 
         // Validation - password is no longer required in input
         if (!name || !email || !role) {
@@ -767,6 +835,11 @@ router.post('/users/bulk-import', requireInstituteAdmin, requirePermission('mana
           });
           continue;
         }
+
+        // Validate associationType if provided
+        const validAssociationType = associationtype && ['ACTIVE', 'ALUMNI'].includes(associationtype.toUpperCase()) 
+          ? associationtype.toUpperCase() 
+          : 'ACTIVE';
 
         // Check if user already exists
         const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -793,16 +866,27 @@ router.post('/users/bulk-import', requireInstituteAdmin, requirePermission('mana
           email: email.toLowerCase().trim(),
           passwordHash: generatedPassword,
           role,
-          institute: req.admin.institution,
+          institute: validAssociationType === 'ALUMNI' ? null : req.admin.institution,
           bio: bio ? bio.trim() : undefined,
-          githubUsername: githubUsername ? githubUsername.trim() : undefined,
+          githubUsername: githubusername ? githubusername.trim() : undefined,
           profileSetupComplete: true,
           roleSetPermanently: true,
           roleSetAt: new Date(),
           associationStatus: 'APPROVED',
+          associationType: 'ACTIVE', // Main association type is always ACTIVE
           approvedBy: req.admin._id,
           approvedAt: new Date()
         });
+
+        // If ALUMNI, add to alumniAssociations array instead of main institute
+        if (validAssociationType === 'ALUMNI') {
+          newUser.alumniAssociations = [{
+            institute: req.admin.institution,
+            role: role,
+            approvedBy: req.admin._id,
+            approvedAt: new Date()
+          }];
+        }
 
         await newUser.save();
         
@@ -810,6 +894,7 @@ router.post('/users/bulk-import', requireInstituteAdmin, requirePermission('mana
           email: newUser.email,
           name: newUser.name,
           role: newUser.role,
+          associationType: validAssociationType,
           password: generatedPassword // Include generated password in response
         });
 
@@ -848,9 +933,9 @@ router.post('/users/bulk-import', requireInstituteAdmin, requirePermission('mana
     // Generate CSV with passwords for successful creations
     let csvContent = '';
     if (results.created.length > 0) {
-      const csvHeaders = 'Name,Email,Role,Password\n';
+      const csvHeaders = 'Name,Email,Role,Association Type,Password\n';
       const csvRows = results.created.map(user => 
-        `"${user.name}","${user.email}","${user.role}","${user.password}"`
+        `"${user.name}","${user.email}","${user.role}","${user.associationType}","${user.password}"`
       ).join('\n');
       csvContent = csvHeaders + csvRows;
     }
@@ -869,7 +954,8 @@ router.post('/users/bulk-import', requireInstituteAdmin, requirePermission('mana
         created: results.created.map(user => ({
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role,
+          associationType: user.associationType
           // Password removed from results for security (available in CSV)
         })),
         failed: results.failed,
